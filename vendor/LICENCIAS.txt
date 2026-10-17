@@ -1,0 +1,6 @@
+Librerías de código abierto incluidas en CACIH (sin modificar):
+- @supabase/supabase-js 2.45.4 — MIT — https://github.com/supabase/supabase-js
+- xlsx (SheetJS CE) 0.18.5 — Apache-2.0 — https://sheetjs.com
+- jsPDF 2.5.1 — MIT — https://github.com/parallax/jsPDF
+- jspdf-autotable 3.8.2 — MIT — https://github.com/simonbengtsson/jsPDF-AutoTable
+- html2canvas 1.4.1 — MIT — https://github.com/niklasvh/html2canvas

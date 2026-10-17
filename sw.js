@@ -1,8 +1,8 @@
 // CACIH · service worker: abre sin señal y muestra los avisos de la caja.
-const CACHE = 'cacih-v1.2.0';
+const CACHE = 'cacih-v1.3.0';
 const SHELL = [
-  './', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png',
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js'
+  './', './index.html', './app.js', './manifest.webmanifest', './icon-192.png', './icon-512.png',
+  './vendor/supabase.js', './vendor/591.supabase.js'
 ];
 
 self.addEventListener('install', e => {
@@ -27,7 +27,7 @@ self.addEventListener('fetch', e => {
     }).catch(() => caches.match(req).then(r => r || caches.match('./index.html'))));
     return;
   }
-  // librerías y fuentes: caché primero
+  // fuentes de Google: caché primero
   e.respondWith(caches.match(req).then(r => r || fetch(req).then(res => {
     if (res.ok || res.type === 'opaque') { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
     return res;

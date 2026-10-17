@@ -9,7 +9,9 @@ Base de datos: Supabase, proyecto **cacih** (`yjvhdkwdylrduunkbykw`).
 
 | Archivo | Para qué |
 | --- | --- |
-| `index.html` | Toda la app |
+| `index.html` | Pantalla y estilos de la app |
+| `app.js` | Funcionamiento de la app (desde la versión 1.3) |
+| `vendor/` | Librerías de apoyo, incluidas en la app (6 archivos) |
 | `sw.js` | Permite abrirla sin señal |
 | `manifest.webmanifest` | Nombre e ícono al instalarla |
 | `icon-192.png`, `icon-512.png` | Íconos |
@@ -17,11 +19,11 @@ Base de datos: Supabase, proyecto **cacih** (`yjvhdkwdylrduunkbykw`).
 ## Publicar en GitHub Pages (una sola vez)
 
 1. En GitHub (usuario JUCEAS) cree el repositorio **CACIH**, público.
-2. *Add file → Upload files*: suba los 5 archivos de la tabla. *Commit changes*.
+2. *Add file → Upload files*: suba todos los archivos de la tabla, incluida la carpeta `vendor` completa (arrástrela). *Commit changes*.
 3. *Settings → Pages*: Source = *Deploy from a branch*, rama `main`, carpeta `/ (root)`. *Save*.
 4. En 1–2 minutos queda en **https://juceas.github.io/CACIH/**
 
-Para actualizar la app: suba de nuevo `index.html` (y `sw.js` si cambió).
+Para actualizar la app: suba de nuevo los archivos que cambiaron.
 
 ## Configurar el acceso en Supabase (una sola vez)
 
@@ -86,6 +88,51 @@ Llega primero un aviso de prueba.
 - **iPhone:** primero hay que instalar la app (Compartir → Agregar a inicio) y activar los avisos desde la app instalada.
 - Si el navegador bloqueó los avisos, se permiten desde el candado junto a la dirección.
 - Al tocar **Salir**, ese dispositivo deja de recibir avisos.
+
+## Versión 1.3 · Ficha ampliada y seguridad reforzada
+
+### Instalar la 1.3
+
+1. Supabase → **SQL Editor** → pegue y ejecute `actualizacion-v1.3.sql`.
+2. GitHub → suba `index.html`, `app.js`, `sw.js` y la carpeta `vendor` completa.
+3. Cierre y vuelva a abrir la app. En *Parámetros* debe decir **Versión de la app 1.3.0**.
+
+### Datos nuevos de la ficha
+
+- **A:** tipo de documento (DNI, carné de residente o pasaporte), vencimiento (no acepta documentos vencidos), nacionalidad y lugar de nacimiento.
+- **B:** dónde se llenó la solicitud y **ubicación GPS** de la vivienda (obligatoria si se llena en la casa).
+- **C:** negocio o empleador, **cónyuge** (si es casado/a o en unión libre) y si es **familiar de un directivo**.
+- **E:** **dos referencias personales**.
+- **F:** **foto del rostro** del solicitante y **firma a ruego**: si no sabe firmar, pone huella y firma un testigo con nombre y DNI.
+
+### Seguridad nueva
+
+- Al tocar **Salir** se borra del teléfono todo lo guardado (borrador, cola sin enviar, fotos). Si hay solicitudes sin enviar, la app avisa antes.
+- **Oficina y Administrador** se desconectan solos tras 15 minutos sin uso (ajustable en *Parámetros*). Un minuto antes aparece un aviso.
+- **Exportar listados** (Excel y PDF): por defecto solo el administrador. Cada exportación, descarga de ficha e impresión queda registrada.
+- Las librerías van dentro de la app; ya no se carga código de servidores externos. Una política de seguridad (CSP) impide que el navegador ejecute código de otro origen.
+- Contraseñas nuevas: mínimo 10 caracteres, con letras y números.
+- Las cuentas nuevas siempre quedan como Promotor pendiente de activar.
+
+### Configuración que debe hacer usted en Supabase
+
+En supabase.com → proyecto **cacih** → **Authentication**:
+
+1. **Contraseñas** (*Sign In / Providers → Email*, o *Policies* según la versión del panel):
+   - *Minimum password length*: **10**.
+   - *Password requirements*: **letras y números**.
+   - *Leaked password protection*: actívela si su plan la incluye (bloquea contraseñas filtradas en internet).
+2. **Registro de cuentas nuevas** (*Sign In / Providers → Allow new users to sign up*):
+   - Déjelo **activo** mientras sus promotores crean sus cuentas.
+   - Cuando ya estén todos, **desactívelo**. Para un promotor nuevo, créelo usted en *Authentication → Users → Add user* (marque *Auto Confirm User*) y actívelo en la app.
+3. **Respaldos:** el plan gratuito no incluye respaldos descargables, y **pausa el proyecto si pasa 7 días sin uso**.
+   - Mientras sea gratuito: cada viernes exporte el Excel con el filtro *Todas* y guárdelo en un lugar seguro (por ejemplo, Google Drive con acceso restringido).
+   - Cuando la caja opere con dinero real, pase al **plan Pro**: respaldos diarios y sin pausas.
+
+### Pendiente para una próxima versión
+
+- Verificación en dos pasos (código en Google Authenticator) para Oficina y Administrador.
+- Registro de depósitos, recibos y libreta de ahorro.
 
 ## Seguridad
 
