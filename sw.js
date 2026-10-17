@@ -1,5 +1,5 @@
 // CACIH · service worker: abre sin señal y muestra los avisos de la caja.
-const CACHE = 'cacih-v1.1.0';
+const CACHE = 'cacih-v1.2.0';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js'

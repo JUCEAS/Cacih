@@ -171,7 +171,7 @@ table.plain th{font-size:12px;color:var(--muted);text-transform:uppercase;letter
 /* ================= Configuración ================= */
 const SUPABASE_URL='https://yjvhdkwdylrduunkbykw.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlqdmhka3dkeWxyZHV1bmtieWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyNjc1NzQsImV4cCI6MjEwNzg0MzU3NH0.r0b7VfCZIbTuEE7KA0vD-gUVfoZSfJSnyu-sLr-Xv2s';
-const VERSION='1.1.0';
+const VERSION='1.2.0';
 const VAPID_PUBLIC='BKdmYfjnL3uiR_q1sSb18aNBr2QnrcuWiZYZ8qwFTISiMWAzmgXHJcDMeQZGihYobRFfrj2FlSH1oXocK37StQo';
 const LIBS={
   xlsx:'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
@@ -195,7 +195,7 @@ const idb={_db:null,
 
 /* ================= Estado ================= */
 const S={session:null,perfil:null,params:{...DEFAULT_PARAMS},view:'nueva',step:0,errors:{},draft:null,queue:[],sent:null,
-  filter:'Pendiente',q:'',bandeja:[],open:null,detail:null,mine:[],usuarios:[],syncing:false,busy:false};
+  filter:'Pendiente',q:'',bandeja:[],open:null,detail:null,mine:[],usuarios:[],uFilter:'Todos',uCount:{},uLog:[],uAction:null,syncing:false,busy:false};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const L=n=>'L '+Number(n||0).toLocaleString('es-HN',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -334,7 +334,11 @@ async function loadDetail(id){
   S.detail={s,urls,log:log||[]};render();
 }
 async function loadMine(){const{data}=await sb.from('solicitudes').select('folio,estado,nombres,apellidos,codigo_socio,motivo_rechazo,creado_en').eq('promotor_id',S.session.user.id).order('creado_en',{ascending:false}).limit(50);S.mine=data||[];render()}
-async function loadUsuarios(){const{data,error}=await sb.from('perfiles').select('*').order('creado_en');if(error){toast(errMsg(error));return}S.usuarios=data;render()}
+async function loadUsuarios(){
+  const[p,c,l]=await Promise.all([sb.from('perfiles').select('*').order('creado_en'),sb.rpc('resumen_usuarios'),sb.from('bitacora_usuarios').select('*').order('creado_en',{ascending:false}).limit(15)]);
+  if(p.error){toast(errMsg(p.error));return}
+  S.usuarios=p.data;S.uCount={};(c.data||[]).forEach(r=>S.uCount[r.user_id]=r);S.uLog=l.data||[];S.uAction=null;render()}
+async function uRpc(fn,args,ok){const{error}=await sb.rpc(fn,args);if(error){toast(errMsg(error),5000);return false}toast(ok);await loadUsuarios();return true}
 async function loadParams(){const{data}=await sb.from('parametros').select('*').eq('id',1).maybeSingle();if(data){S.params=data;try{localStorage.setItem('cacih_params',JSON.stringify(data))}catch(e){}}else{try{const c=localStorage.getItem('cacih_params');if(c)S.params=JSON.parse(c)}catch(e){}}$('#lema').textContent=S.params.lema}
 
 /* ================= Exportar Excel y PDF ================= */
@@ -450,7 +454,9 @@ function vAuth(mode){
   <p class="hint" style="margin:14px 0 0;text-align:center">${mode==='reg'?'¿Ya tiene cuenta? <button type="button" class="btn-sm" id="toLogin">Entrar</button>':'¿Es promotor nuevo? <button type="button" class="btn-sm" id="toReg">Crear cuenta</button>'}</p></form>
   <p class="hint" style="text-align:center;margin-top:14px">Las cuentas nuevas quedan pendientes hasta que la oficina las active.</p></div>`;
 }
-function vPendiente(){return `<div class="auth card" style="text-align:center"><h2>Cuenta pendiente de activación</h2><p class="lead">Hola ${esc(S.perfil?.nombre||'')}. La oficina de CACIH debe activar su cuenta y asignarle un rol antes de que pueda registrar solicitudes.</p><div class="rowbtns" style="justify-content:center"><button class="btn-primary" id="recheck">Ya me activaron</button></div></div>`}
+function vPendiente(){
+  if(S.perfil?.suspendido_en)return `<div class="auth card" style="text-align:center"><h2>Cuenta suspendida</h2><p class="lead">Su acceso a CACIH fue suspendido el ${fecha(S.perfil.suspendido_en)}. Si cree que es un error, comuníquese con la oficina de la caja.</p><div class="rowbtns" style="justify-content:center"><button id="recheck">Volver a comprobar</button></div></div>`;
+  return `<div class="auth card" style="text-align:center"><h2>Cuenta pendiente de activación</h2><p class="lead">Hola ${esc(S.perfil?.nombre||'')}. La oficina de CACIH debe activar su cuenta y asignarle un rol antes de que pueda registrar solicitudes.</p><div class="rowbtns" style="justify-content:center"><button class="btn-primary" id="recheck">Ya me activaron</button></div></div>`}
 
 function vNueva(){
   if(S.busy)return `<div class="card empty"><span class="spin"></span> Enviando solicitud y documentos…</div>`;
@@ -516,11 +522,30 @@ function vDetalle(){
   <div class="sheet-wrap">${fichaHTML(s,urls)}</div>`;
 }
 
+const uEstado=u=>u.activo?'Activo':u.suspendido_en?'Suspendido':'Pendiente';
 function vUsuarios(){
-  return `<h1>Usuarios</h1><p class="lead">Active a los promotores nuevos y asigne roles. Promotor: registra solicitudes. Oficina: aprueba e imprime. Administrador: además gestiona usuarios y parámetros.</p>
-  <div class="card tablewrap" style="margin-top:16px;padding:8px 16px"><table class="plain"><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Activo</th></tr></thead><tbody>
-  ${S.usuarios.map(u=>{const me=u.user_id===S.session.user.id;return `<tr><td>${esc(u.nombre||'—')}${me?' <span class="hint">(usted)</span>':''}</td><td style="word-break:break-all">${esc(u.email)}</td><td><label for="rol_${u.user_id}" hidden>Rol</label><select id="rol_${u.user_id}" data-urol="${u.user_id}" ${me?'disabled':''} style="min-width:130px">${['promotor','oficina','admin'].map(r=>`<option value="${r}" ${u.rol===r?'selected':''}>${r==='admin'?'Administrador':r==='oficina'?'Oficina':'Promotor'}</option>`).join('')}</select></td><td><label class="chips" style="display:inline-flex"><input type="checkbox" data-uact="${u.user_id}" ${u.activo?'checked':''} ${me?'disabled':''}> ${u.activo?'Sí':'No'}</label></td></tr>`}).join('')}
-  </tbody></table></div><p class="hint">Si un promotor olvida su contraseña, restablézcala desde el panel de Supabase (Authentication → Users).</p>`;
+  const cnt=S.uCount||{},orden={Pendiente:0,Activo:1,Suspendido:2};
+  const lista=[...S.usuarios].filter(u=>S.uFilter==='Todos'||uEstado(u)===S.uFilter).sort((a,b)=>orden[uEstado(a)]-orden[uEstado(b)]||(a.nombre||'').localeCompare(b.nombre||''));
+  const n=e=>S.usuarios.filter(u=>uEstado(u)===e).length;
+  const card=u=>{const me=u.user_id===S.session.user.id,e=uEstado(u),c=cnt[u.user_id]||{registradas:0,revisadas:0},hist=Number(c.registradas)+Number(c.revisadas),open=S.uAction&&S.uAction.id===u.user_id;
+    return `<div class="card" style="padding:14px 16px">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div style="min-width:0"><b>${esc(u.nombre||'Sin nombre')}</b>${me?' <span class="hint">(usted)</span>':''}<div class="hint" style="word-break:break-all">${esc(u.email)}</div>
+      <div class="hint">${hist?`${c.registradas} registradas · ${c.revisadas} revisadas`:'Sin solicitudes'} · cuenta desde ${fecha(u.creado_en)}</div>
+      ${e==='Suspendido'?`<div class="hint" style="color:var(--bad)">Suspendido el ${fecha(u.suspendido_en)} · ${esc(u.motivo_suspension||'')}</div>`:''}</div>
+      <span class="pill ${e==='Activo'?'p-ok':e==='Suspendido'?'p-bad':'p-pend'}">${e==='Pendiente'?'Pendiente de activar':e}</span></div>
+    ${me?'':`<div class="actions" style="margin-top:10px">
+      <div class="f" style="width:170px"><label class="t" for="rol_${u.user_id}">Rol</label><select id="rol_${u.user_id}" data-urol="${u.user_id}">${['promotor','oficina','admin'].map(r=>`<option value="${r}" ${u.rol===r?'selected':''}>${r==='admin'?'Administrador':r==='oficina'?'Oficina':'Promotor'}</option>`).join('')}</select></div>
+      ${e==='Activo'?`<button class="btn-bad" data-usus="${u.user_id}">Suspender</button>`:`<button class="btn-primary" data-uact="${u.user_id}">${e==='Suspendido'?'Reactivar':'Activar'}</button>`}
+      ${e!=='Activo'?`<button class="btn-bad" data-udel="${u.user_id}" ${hist?'disabled title="Tiene historial: solo se puede suspender"':''}>Eliminar</button>`:''}
+    </div>
+    ${open&&S.uAction.tipo==='sus'?`<div class="actions" style="border-top:1px solid var(--line);padding-top:12px"><div class="f" style="flex:1;min-width:200px"><label class="t" for="susMotivo">Motivo de la suspensión</label><input id="susMotivo" placeholder="Ej. ya no labora con la caja"></div><button class="btn-bad" data-ususok="${u.user_id}">Confirmar suspensión</button><button class="btn-sm" data-ucancel>Cancelar</button></div><p class="hint" style="margin:6px 0 0">Pierde el acceso de inmediato y deja de recibir avisos. Sus solicitudes y su historial se conservan.</p>`:''}
+    ${open&&S.uAction.tipo==='del'?`<div class="warnnote" style="margin-top:12px">¿Eliminar definitivamente la cuenta de ${esc(u.email)}? No se puede deshacer. <div class="actions"><button class="btn-bad" data-udelok="${u.user_id}">Sí, eliminar</button><button class="btn-sm" data-ucancel>Cancelar</button></div></div>`:''}`}
+    </div>`};
+  return `<h1>Usuarios</h1><p class="lead">Promotor: registra solicitudes. Oficina: aprueba, imprime y exporta. Administrador: además gestiona usuarios y parámetros.</p>
+  <div class="filters">${['Pendiente','Activo','Suspendido','Todos'].map(f=>`<button data-uf="${f}" class="${S.uFilter===f?'on':''}">${f==='Todos'?'Todos':f==='Pendiente'?'Por activar':f+'s'}${f!=='Todos'?' · '+n(f):''}</button>`).join('')}</div>
+  <div class="list">${lista.length?lista.map(card).join(''):`<div class="card empty">No hay usuarios en este grupo.</div>`}</div>
+  <div class="note" style="margin-top:16px"><b>¿Alguien dejó de trabajar con la caja?</b> Use <b>Suspender</b>: pierde el acceso al momento y se conserva todo lo que registró. <b>Eliminar</b> solo está disponible para cuentas sin solicitudes, por ejemplo las creadas por error. Si alguien olvida su contraseña, restablézcala en el panel de Supabase (Authentication → Users).</div>
+  ${S.uLog&&S.uLog.length?`<h2 style="margin:22px 0 8px">Últimos cambios</h2><ul class="log">${S.uLog.map(l=>`<li>${fechaHora(l.creado_en)} · ${esc(l.accion)} · ${esc(l.email_afectado||'')}${l.detalle?' · '+esc(l.detalle):''}</li>`).join('')}</ul>`:''}`;
 }
 function vParams(){
   const p=S.params,P=(k,t,desc,type='number')=>`<div class="param"><div><label class="t" for="p_${k}">${t}</label><p>${desc}</p></div><input id="p_${k}" data-p="${k}" type="${type}" value="${esc(p[k])}"></div>`;
@@ -575,6 +600,13 @@ document.addEventListener('click',async e=>{
   const t=e.target.closest('button');if(!t)return;
   if(t.id==='toReg'){S.authMode='reg';render()} if(t.id==='toLogin'){S.authMode='login';render()}
   if(t.id==='logout'){if(S.queue.length&&!t.dataset.sure){t.dataset.sure='1';t.textContent='¿Salir? Hay envíos pendientes';setTimeout(()=>{t.textContent='Salir';delete t.dataset.sure},4000);return}await quitarDispositivo();await sb.auth.signOut()}
+  if(t.dataset.uf){S.uFilter=t.dataset.uf;S.uAction=null;render()}
+  if(t.dataset.usus){S.uAction={id:t.dataset.usus,tipo:'sus'};render();$('#susMotivo')?.focus()}
+  if(t.dataset.udel){S.uAction={id:t.dataset.udel,tipo:'del'};render()}
+  if(t.dataset.ucancel!==undefined){S.uAction=null;render()}
+  if(t.dataset.ususok){const m=$('#susMotivo').value.trim();if(!m){toast('Escriba el motivo de la suspensión.');return}t.disabled=true;await uRpc('suspender_usuario',{p_id:t.dataset.ususok,p_motivo:m},'Usuario suspendido')}
+  if(t.dataset.uact){t.disabled=true;await uRpc('activar_usuario',{p_id:t.dataset.uact},'Usuario activado')}
+  if(t.dataset.udelok){t.disabled=true;await uRpc('eliminar_usuario',{p_id:t.dataset.udelok},'Cuenta eliminada')}
   if(t.id==='pushBtn'){t.disabled=true;await togglePush();t.disabled=false}
   if(t.id==='xlsBtn')exportExcel(t);
   if(t.id==='pdfListBtn')exportListPDF(t);
@@ -617,8 +649,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',async e=>{
   const el=e.target,d=S.draft;
-  if(el.dataset.urol){const{error}=await sb.from('perfiles').update({rol:el.value}).eq('user_id',el.dataset.urol);toast(error?errMsg(error):'Rol actualizado');loadUsuarios();return}
-  if(el.dataset.uact){const{error}=await sb.from('perfiles').update({activo:el.checked}).eq('user_id',el.dataset.uact);toast(error?errMsg(error):(el.checked?'Usuario activado':'Usuario desactivado'));loadUsuarios();return}
+  if(el.dataset.urol){el.disabled=true;await uRpc('cambiar_rol',{p_id:el.dataset.urol,p_rol:el.value},'Rol actualizado');return}
   if(!d)return;
   if(el.type==='radio'&&el.dataset.k){d[el.dataset.k]=el.value;delete S.errors[el.dataset.k];saveDraft();if(['pep','pago'].includes(el.dataset.k))render()}
   if(el.type==='checkbox'&&el.dataset.k){d[el.dataset.k]=el.checked;saveDraft()}
