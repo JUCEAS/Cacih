@@ -140,6 +140,11 @@ table.plain th{font-size:12px;color:var(--muted);text-transform:uppercase;letter
 .sheet .sigs img{max-height:48px;max-width:100%;margin:0 auto 3px}
 .sheet .foot{margin-top:10px;font-size:10px;color:#555;display:flex;justify-content:space-between}
 #print{display:none}
+#pdfArea{position:fixed;left:-10000px;top:0;width:816px;background:#fff}
+#pdfArea .sheet{min-width:0;border:0;border-radius:0;padding:36px 40px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:12px}
+.toolbar .grp{display:flex;gap:8px;flex-wrap:wrap}
+.who .on{background:var(--gold);color:#17241c}
 @media print{
   @page{size:letter;margin:11mm}
   body{background:#fff}
@@ -153,19 +158,28 @@ table.plain th{font-size:12px;color:var(--muted);text-transform:uppercase;letter
 <header class="top" id="hdr" hidden><div class="in">
   <div class="brand"><svg width="34" height="34" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="31" fill="#b48a2c"/><circle cx="32" cy="32" r="26" fill="#173f2c"/><path d="M18 44 L28 32 L35 38 L46 22" fill="none" stroke="#f3e2b3" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 22 H46 V28" fill="none" stroke="#f3e2b3" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
     <div><b>CACIH</b><small id="lema">Un camino hacia la inversión estratégica</small></div></div>
-  <div class="who"><span id="whoName"></span><button id="logout">Salir</button></div>
+  <div class="who"><span id="whoName"></span><button id="pushBtn" hidden>Avisos</button><button id="logout">Salir</button></div>
   <nav class="tabs" role="tablist" id="tabs"></nav>
 </div></header>
 <div class="netbar" id="netbar" hidden></div>
 <main class="wrap" id="app"><p class="empty"><span class="spin"></span> Cargando…</p></main>
 <div id="print"></div>
+<div id="pdfArea" aria-hidden="true"></div>
 <div class="toast" id="toast" hidden></div>
 
 <script>
 /* ================= Configuración ================= */
 const SUPABASE_URL='https://yjvhdkwdylrduunkbykw.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlqdmhka3dkeWxyZHV1bmtieWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyNjc1NzQsImV4cCI6MjEwNzg0MzU3NH0.r0b7VfCZIbTuEE7KA0vD-gUVfoZSfJSnyu-sLr-Xv2s';
-const VERSION='1.0.0';
+const VERSION='1.1.0';
+const VAPID_PUBLIC='BKdmYfjnL3uiR_q1sSb18aNBr2QnrcuWiZYZ8qwFTISiMWAzmgXHJcDMeQZGihYobRFfrj2FlSH1oXocK37StQo';
+const LIBS={
+  xlsx:'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+  jspdf:'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
+  autotable:'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js',
+  html2canvas:'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'};
+const _libs={};
+function loadScript(k){return _libs[k]||(_libs[k]=new Promise((res,rej)=>{const s=document.createElement('script');s.src=LIBS[k];s.onload=res;s.onerror=()=>{delete _libs[k];rej(new Error('No se pudo cargar la herramienta de exportación. Revise la conexión.'))};document.head.appendChild(s)}))}
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
 
 const STEPS=[{k:'A',t:'Identificación'},{k:'B',t:'Domicilio'},{k:'C',t:'Actividad'},{k:'D',t:'Ahorro'},{k:'E',t:'Beneficiarios'},{k:'F',t:'Documentos'},{k:'G',t:'Declaraciones'},{k:'H',t:'Revisar y enviar'}];
@@ -323,6 +337,103 @@ async function loadMine(){const{data}=await sb.from('solicitudes').select('folio
 async function loadUsuarios(){const{data,error}=await sb.from('perfiles').select('*').order('creado_en');if(error){toast(errMsg(error));return}S.usuarios=data;render()}
 async function loadParams(){const{data}=await sb.from('parametros').select('*').eq('id',1).maybeSingle();if(data){S.params=data;try{localStorage.setItem('cacih_params',JSON.stringify(data))}catch(e){}}else{try{const c=localStorage.getItem('cacih_params');if(c)S.params=JSON.parse(c)}catch(e){}}$('#lema').textContent=S.params.lema}
 
+/* ================= Exportar Excel y PDF ================= */
+async function fetchExport(){
+  let q=sb.from('solicitudes').select('*').order('creado_en',{ascending:true}).limit(5000);
+  if(S.filter!=='Todas')q=q.eq('estado',S.filter);
+  const t=S.q.trim();if(t){const s=t.replace(/[%,()]/g,'');q=q.or(`nombres.ilike.%${s}%,apellidos.ilike.%${s}%,dni.ilike.%${s.replace(/\D/g,'')||s}%,codigo_socio.ilike.%${s}%`)}
+  const{data,error}=await q;if(error)throw error;return data}
+const exportName=ext=>`CACIH_solicitudes_${S.filter==='Todas'?'todas':S.filter.toLowerCase()+'s'}_${new Date().toISOString().slice(0,10)}.${ext}`;
+async function exportExcel(btn){
+  btn.disabled=true;const txt=btn.textContent;btn.innerHTML='<span class="spin"></span> Preparando…';
+  try{await loadScript('xlsx');const rows=await fetchExport();if(!rows.length){toast('No hay solicitudes para exportar.');return}
+    const data=rows.map(s=>{const ben=(s.beneficiarios||[]);return{
+      'Folio':s.folio,'Estado':s.estado,'Código de socio':s.codigo_socio||'','Acta':s.acta||'','Fecha de envío':new Date(s.creado_en),'Fecha de revisión':s.revisado_en?new Date(s.revisado_en):'','Motivo de rechazo':s.motivo_rechazo||'',
+      'Nombres':s.nombres,'Apellidos':s.apellidos,'DNI':fmtDni(s.dni),'Fecha de nacimiento':s.fecha_nacimiento.split('-').reverse().join('/'),'Edad':edad(s.fecha_nacimiento),'Sexo':s.sexo,'Estado civil':s.estado_civil||'','Escolaridad':s.escolaridad||'','Dependientes':s.dependientes??'',
+      'Aldea / barrio':s.aldea,'Municipio':s.municipio,'Departamento':s.departamento,'Referencia':s.referencia||'','Celular':s.celular,'WhatsApp':s.whatsapp?'Sí':'No','Teléfono alterno':s.telefono_alterno||'','Correo':s.email||'','Vivienda':s.vivienda||'',
+      'Actividad':s.actividad,'Rubro':s.rubro||'','Fuente de ingresos':s.fuente_ingresos,'Ingreso mensual (L)':s.rango_ingreso,'PEP':s.es_pep?'Sí':'No','Cargo PEP':s.pep_cargo||'',
+      'Ahorro inicial (L)':Number(s.ahorro_inicial),'Ahorro por periodo (L)':Number(s.ahorro_periodo),'Frecuencia':s.frecuencia,'Forma de pago':s.forma_pago,'Boleta':s.boleta||'',
+      'Beneficiarios':ben.map(b=>`${b.nombre} (${b.parentesco}, ${b.porcentaje}%${b.dni?', DNI '+fmtDni(b.dni):''})`).join('; '),
+      'Tutor':s.tutor?`${s.tutor.nombre} (DNI ${fmtDni(s.tutor.dni)}, ${s.tutor.parentesco||''})`:'',
+      'Declaraciones':s.declaraciones?'Sí':'No','Autoriza datos':s.consentimiento_datos?'Sí':'No','Avisos WhatsApp':s.avisos_whatsapp?'Sí':'No',
+      'Foto DNI':s.foto_dni_frente?'Sí':'No','Firma':s.firma?'Sí':'No','Promotor':s.promotor_nombre}});
+    const ws=XLSX.utils.json_to_sheet(data,{cellDates:true,dateNF:'dd/mm/yyyy'});
+    const keys=Object.keys(data[0]);ws['!cols']=keys.map(k=>({wch:Math.min(40,Math.max(k.length+2,...data.slice(0,200).map(r=>String(r[k]??'').length+1)))}));
+    ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:data.length,c:keys.length-1}})};ws['!freeze']={xSplit:2,ySplit:1};
+    keys.forEach((k,c)=>{if(/\(L\)$/.test(k)&&k!=='Ingreso mensual (L)')for(let r=1;r<=data.length;r++){const cell=ws[XLSX.utils.encode_cell({r,c})];if(cell)cell.z='#,##0.00'}
+      if(/^Fecha/.test(k))for(let r=1;r<=data.length;r++){const cell=ws[XLSX.utils.encode_cell({r,c})];if(cell&&cell.t==='d')cell.z=k==='Fecha de nacimiento'?'dd/mm/yyyy':'dd/mm/yyyy hh:mm'}});
+    const tot={Pendiente:0,Aprobada:0,Rechazada:0};let ahorro=0;rows.forEach(s=>{tot[s.estado]++;if(s.estado==='Aprobada')ahorro+=Number(s.ahorro_inicial)});
+    const res=XLSX.utils.aoa_to_sheet([['CACIH · '+S.params.lema],['Exportado',new Date().toLocaleString('es-HN')],['Filtro',S.filter+(S.q?' · búsqueda: '+S.q:'')],[],['Estado','Solicitudes'],['Pendientes',tot.Pendiente],['Aprobadas',tot.Aprobada],['Rechazadas',tot.Rechazada],['Total',rows.length],[],['Ahorro inicial de aprobadas (L)',ahorro]]);
+    res['!cols']=[{wch:34},{wch:28}];
+    const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Solicitudes');XLSX.utils.book_append_sheet(wb,res,'Resumen');
+    XLSX.writeFile(wb,exportName('xlsx'));toast(rows.length+' solicitudes exportadas a Excel')}
+  catch(e){toast(errMsg(e),4000)}finally{btn.disabled=false;btn.textContent=txt}}
+async function exportListPDF(btn){
+  btn.disabled=true;const txt=btn.textContent;btn.innerHTML='<span class="spin"></span> Preparando…';
+  try{await loadScript('jspdf');await loadScript('autotable');const rows=await fetchExport();if(!rows.length){toast('No hay solicitudes para exportar.');return}
+    const{jsPDF}=window.jspdf;const doc=new jsPDF({orientation:'landscape',unit:'pt',format:'letter'});
+    const W=doc.internal.pageSize.getWidth();
+    doc.setFillColor(23,63,44);doc.rect(0,0,W,58,'F');doc.setTextColor(255);doc.setFont('helvetica','bold');doc.setFontSize(20);doc.text('CACIH',36,32);
+    doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(243,226,179);doc.text(S.params.lema,36,46);
+    doc.setTextColor(255);doc.setFontSize(11);doc.text(`Solicitudes de afiliación · ${S.filter==='Todas'?'todas':S.filter.toLowerCase()+'s'}${S.q?' · "'+S.q+'"':''}`,W-36,32,{align:'right'});
+    doc.setFontSize(9);doc.text('Generado '+new Date().toLocaleString('es-HN'),W-36,46,{align:'right'});
+    doc.autoTable({startY:72,margin:{left:36,right:36},styles:{fontSize:8.5,cellPadding:4,overflow:'linebreak'},headStyles:{fillColor:[42,107,73],textColor:255},alternateRowStyles:{fillColor:[242,244,239]},
+      head:[['Folio','Código','Estado','Nombre','DNI','Domicilio','Celular','Actividad','Ahorro inicial','Cuota','Promotor','Enviada']],
+      body:rows.map(s=>[s.folio,s.codigo_socio||'',s.estado,s.nombres+' '+s.apellidos,fmtDni(s.dni),s.aldea+', '+s.municipio,s.celular,s.actividad+(s.rubro?' · '+s.rubro:''),L(s.ahorro_inicial),L(s.ahorro_periodo)+' '+s.frecuencia.toLowerCase(),s.promotor_nombre,fecha(s.creado_en)]),
+      columnStyles:{8:{halign:'right'},9:{halign:'right'}},
+      didDrawPage:d=>{doc.setFontSize(8);doc.setTextColor(110);doc.text('Página '+doc.internal.getNumberOfPages(),W-36,doc.internal.pageSize.getHeight()-18,{align:'right'})}});
+    const ap=rows.filter(s=>s.estado==='Aprobada');doc.setFontSize(9.5);doc.setTextColor(30);
+    doc.text(`Total: ${rows.length} · Aprobadas: ${ap.length} · Ahorro inicial de aprobadas: ${L(ap.reduce((a,s)=>a+Number(s.ahorro_inicial),0))}`,36,doc.lastAutoTable.finalY+20);
+    doc.save(exportName('pdf'));toast('Reporte PDF descargado')}
+  catch(e){toast(errMsg(e),4000)}finally{btn.disabled=false;btn.textContent=txt}}
+async function fichaPDF(btn){
+  btn.disabled=true;const txt=btn.textContent;btn.innerHTML='<span class="spin"></span> Generando…';
+  try{await loadScript('html2canvas');await loadScript('jspdf');
+    const area=$('#pdfArea');area.innerHTML=fichaHTML(S.detail.s,S.detail.urls);
+    await Promise.all([...area.querySelectorAll('img')].map(i=>i.complete?0:new Promise(r=>{i.onload=i.onerror=r})));
+    const canvas=await html2canvas(area.firstElementChild,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
+    const{jsPDF}=window.jspdf;const doc=new jsPDF({unit:'pt',format:'letter'});
+    const pw=doc.internal.pageSize.getWidth(),ph=doc.internal.pageSize.getHeight(),m=24,iw=pw-2*m,pageH=Math.floor(canvas.width*(ph-2*m)/iw);
+    if(canvas.height<=pageH*1.4){const k=Math.min(1,pageH/canvas.height),w=iw*k;doc.addImage(canvas.toDataURL('image/jpeg',.92),'JPEG',(pw-w)/2,m,w,canvas.height*w/canvas.width)}
+    else for(let y=0,p=0;y<canvas.height;y+=pageH,p++){const h=Math.min(pageH,canvas.height-y),c=document.createElement('canvas');c.width=canvas.width;c.height=h;c.getContext('2d').drawImage(canvas,0,y,canvas.width,h,0,0,canvas.width,h);
+      if(p)doc.addPage();doc.addImage(c.toDataURL('image/jpeg',.92),'JPEG',m,m,iw,h*iw/canvas.width)}
+    const s=S.detail.s;doc.save(`Ficha_${s.codigo_socio||s.folio}_${(s.apellidos+'_'+s.nombres).replace(/\s+/g,'_')}.pdf`);area.innerHTML='';toast('Ficha descargada en PDF')}
+  catch(e){toast(errMsg(e),4000)}finally{btn.disabled=false;btn.textContent=txt}}
+
+/* ================= Avisos (notificaciones push) ================= */
+const pushSupported=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+const isIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent);
+const isStandalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+function b64u(s){const p='='.repeat((4-s.length%4)%4),b=atob((s+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(b,c=>c.charCodeAt(0))}
+async function pushState(){
+  const b=$('#pushBtn');if(!S.perfil?.activo){b.hidden=true;return}
+  b.hidden=false;
+  if(!pushSupported()){S.push=isIOS()&&!isStandalone()?'instalar':'no';}
+  else if(Notification.permission==='denied')S.push='bloqueado';
+  else{const reg=await navigator.serviceWorker.ready.catch(()=>null);const sub=reg&&await reg.pushManager.getSubscription();S.push=sub?'on':'off'}
+  b.textContent=S.push==='on'?'Avisos activos':'Activar avisos';b.classList.toggle('on',S.push==='on')}
+async function togglePush(){
+  if(S.push==='instalar'){toast('En iPhone primero instale la app: Compartir → Agregar a inicio. Luego active los avisos desde la app instalada.',7000);return}
+  if(S.push==='no'){toast('Este navegador no admite avisos. Use Chrome o Edge.',5000);return}
+  if(S.push==='bloqueado'){toast('Los avisos están bloqueados para este sitio. Permítalos en la configuración del navegador (ícono del candado junto a la dirección).',7000);return}
+  const reg=await navigator.serviceWorker.ready;
+  if(S.push==='on'){const sub=await reg.pushManager.getSubscription();if(sub){await sb.from('push_suscripciones').delete().eq('endpoint',sub.endpoint);await sub.unsubscribe()}toast('Avisos desactivados en este dispositivo');return pushState()}
+  if(await Notification.requestPermission()!=='granted'){toast('Sin permiso no se pueden mostrar avisos.');return pushState()}
+  try{let sub=await reg.pushManager.getSubscription();if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(VAPID_PUBLIC)});
+    const j=sub.toJSON();
+    const{error}=await sb.from('push_suscripciones').upsert({endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,dispositivo:navigator.userAgent.slice(0,160)},{onConflict:'endpoint'});
+    if(error)throw error;
+    await sb.functions.invoke('avisos',{body:{tipo:'prueba'}});
+    toast(isOficina()?'Avisos activados: le llegará uno de prueba y luego uno por cada solicitud nueva.':'Avisos activados: le llegará uno de prueba y luego uno cuando la oficina apruebe o rechace sus solicitudes.',6000)}
+  catch(e){toast('No se pudieron activar los avisos: '+errMsg(e),6000)}
+  pushState()}
+async function quitarDispositivo(){try{if(!pushSupported())return;const reg=await navigator.serviceWorker.getRegistration();const sub=reg&&await reg.pushManager.getSubscription();if(sub){await sb.from('push_suscripciones').delete().eq('endpoint',sub.endpoint);await sub.unsubscribe()}}catch(e){}}
+function irA(hash){
+  const m=hash.match(/solicitud=([0-9a-f-]{36})/);
+  if(m&&isOficina()){S.view='bandeja';S.open=m[1];render();loadDetail(m[1])}
+  else if(/envios/.test(hash)){setView('envios')}
+  if(hash)history.replaceState(null,'',location.pathname)}
+
 /* ================= Vistas ================= */
 const err=k=>S.errors[k]?`<span class="err">${esc(S.errors[k])}</span>`:'';
 function inp(k,label,o={}){const d=S.draft;return `<div class="f ${o.full?'full':''}"><label class="t" for="i_${k}">${label}${o.req?' <i>*</i>':''}</label><input id="i_${k}" data-k="${k}" type="${o.type||'text'}" class="${o.mono?'mono':''}" value="${esc(d[k])}" ${o.ph?`placeholder="${esc(o.ph)}"`:''} ${o.mode?`inputmode="${o.mode}"`:''} ${o.max?`maxlength="${o.max}"`:''} autocomplete="off">${o.hint?`<span class="hint">${o.hint}</span>`:''}${err(k)}</div>`}
@@ -373,6 +484,7 @@ function vBandeja(){
   if(S.open)return vDetalle();
   return `<h1>Solicitudes recibidas</h1><p class="lead">Revise cada ficha, imprímala para firma y apruébela con el número de acta.</p>
   <div class="filters">${['Pendiente','Aprobada','Rechazada','Todas'].map(f=>`<button data-f="${f}" class="${S.filter===f?'on':''}">${f==='Todas'?'Todas':f+'s'}</button>`).join('')}</div>
+  <div class="toolbar"><span class="hint">${S.bandeja.length} ${S.bandeja.length===1?'solicitud':'solicitudes'} en esta vista</span><div class="grp"><button class="btn-sm" id="xlsBtn">Exportar Excel</button><button class="btn-sm" id="pdfListBtn">Exportar PDF</button></div></div>
   <form id="searchF" style="display:flex;gap:8px;margin-bottom:12px"><label for="qBox" class="t" hidden>Buscar</label><input id="qBox" placeholder="Buscar por nombre, DNI o código" value="${esc(S.q)}"><button type="submit">Buscar</button></form>
   <div class="list">${S.bandeja.length?S.bandeja.map(s=>`<button class="item" data-open="${s.id}"><b>${esc(s.nombres+' '+s.apellidos)}</b>${pill(s.estado)}<span class="meta"><span class="mono">${esc(s.codigo_socio||s.folio)}</span> · DNI ${esc(fmtDni(s.dni))} · ${esc(s.aldea)}, ${esc(s.municipio)} · ${esc(s.promotor_nombre)} · ${fecha(s.creado_en)}</span><span class="meta num">${L(s.ahorro_inicial)}</span></button>`).join(''):`<div class="card empty">No hay solicitudes ${S.filter==='Todas'?'':S.filter.toLowerCase()+'s'} ${S.q?'que coincidan con la búsqueda':''}.</div>`}</div>`;
 }
@@ -388,7 +500,7 @@ function fichaHTML(s,urls){
   <h4>E. Beneficiarios</h4><table><tr><td class="k">Nombre</td><td class="k">DNI</td><td class="k">Parentesco</td><td class="k" style="width:50px">%</td></tr>${ben.map(b=>`<tr><td>${esc(b.nombre)}</td><td>${esc(fmtDni(b.dni))}</td><td>${esc(b.parentesco)}</td><td>${esc(b.porcentaje)}</td></tr>`).join('')}</table>
   ${s.tutor?`<table style="margin-top:5px">${row('Tutor (socio menor de edad)',s.tutor.nombre+' · DNI '+fmtDni(s.tutor.dni)+' · '+(s.tutor.parentesco||''))}</table>`:''}
   <h4>F–G. Declaraciones y autorización de datos</h4><p style="margin:3px 0">${s.declaraciones?'☑':'☐'} Origen lícito de fondos, aceptación de estatutos y reglamento, asistencia a asambleas, plazo de devolución de aportaciones. ${s.consentimiento_datos?'☑':'☐'} Autoriza el uso de sus datos. ${s.avisos_whatsapp?'☑':'☐'} Avisos por WhatsApp.</p>
-  <div class="sigs"><div>${s.firma&&urls[s.firma]?`<img src="${urls[s.firma]}" alt="Firma del solicitante">`:''}<span>Firma o huella del socio/a</span></div><div><span>Secretario/a</span></div><div><span>Tesorero/a</span></div></div>
+  <div class="sigs"><div>${s.firma&&urls[s.firma]?`<img src="${urls[s.firma]}" crossorigin="anonymous" alt="Firma del solicitante">`:''}<span>Firma o huella del socio/a</span></div><div><span>Secretario/a</span></div><div><span>Tesorero/a</span></div></div>
   <h4>H. Uso exclusivo de la caja</h4><table>${row('Promotor / fecha de envío',s.promotor_nombre+' · '+fechaHora(s.creado_en))}${row('Estado',s.estado+(s.acta?' · acta No. '+s.acta:'')+(s.motivo_rechazo?' · '+s.motivo_rechazo:'')+(s.revisado_en?' · '+fecha(s.revisado_en):''))}${row('Copia de DNI',s.foto_dni_frente?'Foto recibida'+(s.foto_dni_reverso?' (frente y reverso)':' (frente)'):'No')}${row('Nivel de riesgo',s.es_pep?'Alto (PEP)':'Bajo')}</table>
   <div class="foot"><span>FA-01 v1.0 · Original: archivo · Copia: socio/a</span><span>Impreso ${fechaHora(new Date())}</span></div></div>`;
 }
@@ -398,8 +510,8 @@ function vDetalle(){
   return `<button id="back" class="btn-sm">← Volver a la bandeja</button>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px"><h1>${esc(s.nombres+' '+s.apellidos)}</h1>${pill(s.estado)}</div>
   ${s.estado==='Pendiente'?`<div class="card" style="margin-top:14px"><h3>Autorizar como socio/a ahorrante</h3><p class="hint" style="margin:4px 0 0">Verifique que la foto del DNI coincide con los datos antes de aprobar.</p><div class="actions"><div class="f" style="width:150px"><label class="t" for="acta">No. de acta</label><input id="acta" class="mono" placeholder="Ej. 15"></div><button class="btn-primary" id="approve">Aprobar y generar código</button></div><div class="actions"><div class="f" style="flex:1;min-width:200px"><label class="t" for="motivo">Motivo de rechazo</label><input id="motivo" placeholder="Ej. DNI ilegible, volver a visitar"></div><button class="btn-bad" id="reject">Rechazar</button></div><p class="err" id="apErr"></p></div>`:''}
-  <div class="card" style="margin-top:14px"><div class="rowbtns" style="margin-top:0"><h3>Documentos</h3><button class="btn-primary" id="printBtn">Imprimir ficha</button></div>
-  <div class="docs">${[['foto_dni_frente','DNI · frente'],['foto_dni_reverso','DNI · reverso'],['firma','Firma']].map(([k,t])=>s[k]&&urls[s[k]]?`<figure><a href="${urls[s[k]]}" target="_blank" rel="noopener"><img src="${urls[s[k]]}" alt="${t}"></a><figcaption>${t}</figcaption></figure>`:'').join('')||'<span class="hint">Sin documentos adjuntos.</span>'}</div>
+  <div class="card" style="margin-top:14px"><div class="rowbtns" style="margin-top:0"><h3>Documentos</h3><div class="grp" style="display:flex;gap:8px;flex-wrap:wrap"><button id="pdfFichaBtn">Descargar PDF</button><button class="btn-primary" id="printBtn">Imprimir ficha</button></div></div>
+  <div class="docs">${[['foto_dni_frente','DNI · frente'],['foto_dni_reverso','DNI · reverso'],['firma','Firma']].map(([k,t])=>s[k]&&urls[s[k]]?`<figure><a href="${urls[s[k]]}" target="_blank" rel="noopener"><img src="${urls[s[k]]}" crossorigin="anonymous" alt="${t}"></a><figcaption>${t}</figcaption></figure>`:'').join('')||'<span class="hint">Sin documentos adjuntos.</span>'}</div>
   <h3 style="margin-top:16px">Historial</h3><ul class="log">${log.map(l=>`<li>${fechaHora(l.creado_en)} · ${esc(l.accion)}${l.detalle?' · '+esc(l.detalle):''}</li>`).join('')}</ul></div>
   <div class="sheet-wrap">${fichaHTML(s,urls)}</div>`;
 }
@@ -462,7 +574,11 @@ document.addEventListener('submit',async e=>{
 document.addEventListener('click',async e=>{
   const t=e.target.closest('button');if(!t)return;
   if(t.id==='toReg'){S.authMode='reg';render()} if(t.id==='toLogin'){S.authMode='login';render()}
-  if(t.id==='logout'){if(S.queue.length&&!t.dataset.sure){t.dataset.sure='1';t.textContent='¿Salir? Hay envíos pendientes';setTimeout(()=>{t.textContent='Salir';delete t.dataset.sure},4000);return}await sb.auth.signOut()}
+  if(t.id==='logout'){if(S.queue.length&&!t.dataset.sure){t.dataset.sure='1';t.textContent='¿Salir? Hay envíos pendientes';setTimeout(()=>{t.textContent='Salir';delete t.dataset.sure},4000);return}await quitarDispositivo();await sb.auth.signOut()}
+  if(t.id==='pushBtn'){t.disabled=true;await togglePush();t.disabled=false}
+  if(t.id==='xlsBtn')exportExcel(t);
+  if(t.id==='pdfListBtn')exportListPDF(t);
+  if(t.id==='pdfFichaBtn')fichaPDF(t);
   if(t.id==='recheck'){await loadPerfil();render()}
   if(t.dataset.tab)setView(t.dataset.tab);
   if(t.dataset.go!==undefined)go(+t.dataset.go);
@@ -534,7 +650,8 @@ async function boot(session){
   S.draft=(await idb.get('draft').catch(()=>null))||blankDraft();
   S.queue=(await idb.get('queue').catch(()=>null))||[];
   if(isOficina()&&S.view==='nueva'&&!S.draft.nombres){S.view='bandeja';loadBandeja()}
-  render();countPend();syncQueue();
+  render();countPend();syncQueue();pushState();
+  if(location.hash&&S.perfil?.activo)irA(location.hash);
 }
 let booted=false;
 sb.auth.onAuthStateChange((ev,session)=>{
@@ -546,7 +663,12 @@ sb.auth.onAuthStateChange((ev,session)=>{
 window.addEventListener('online',()=>{netbar();syncQueue();if(S.view==='nueva')render()});
 window.addEventListener('offline',()=>{netbar();if(S.view==='nueva')render()});
 setInterval(()=>{syncQueue();if(S.view==='bandeja'&&!S.open&&navigator.onLine)countPend()},60000);
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  navigator.serviceWorker.addEventListener('message',e=>{const m=e.data||{};if(!S.session||!S.perfil?.activo)return;
+    if(m.type==='aviso'){if(m.tipo==='nueva'){countPend();if(S.view==='bandeja'&&!S.open)loadBandeja()}else if(S.view==='envios')loadMine()}
+    if(m.type==='navegar'&&m.url)irA(m.url)});
+}
 </script>
 </body>
 </html>

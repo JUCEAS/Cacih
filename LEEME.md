@@ -59,6 +59,34 @@ Abra el enlace en Chrome → menú ⋮ → *Agregar a la pantalla principal* / *
 - Se revisa, se imprime en tamaño carta, se aprueba con el número de acta y se genera el código **CR-AAAA-NNNN**.
 - Toda acción queda en el historial de la solicitud.
 
+## Exportar (versión 1.1)
+
+En **Bandeja**, según el filtro y la búsqueda que tenga puestos:
+
+- **Exportar Excel**: un archivo con dos hojas. *Solicitudes* trae una fila por persona y todas las columnas de la ficha, con filtros activos. *Resumen* trae los totales por estado y el ahorro inicial de las aprobadas.
+- **Exportar PDF**: un reporte horizontal con el listado, listo para la Junta o el banco.
+
+Dentro de cada solicitud:
+
+- **Descargar PDF**: la ficha completa en una hoja carta, con la firma.
+- **Imprimir ficha**: la abre en el diálogo de impresión.
+
+## Avisos automáticos (versión 1.1)
+
+Cada persona activa los avisos **una vez en cada dispositivo** con el botón **Activar avisos** (arriba, junto a Salir).
+Llega primero un aviso de prueba.
+
+| Quién | Recibe un aviso cuando… |
+| --- | --- |
+| Oficina y Administrador | Un promotor envía una solicitud nueva |
+| Promotor | La oficina aprueba o rechaza una de sus solicitudes |
+
+- Tocar el aviso abre la solicitud o *Mis envíos*.
+- Llegan aunque la app esté cerrada (Android y computadora con Chrome o Edge).
+- **iPhone:** primero hay que instalar la app (Compartir → Agregar a inicio) y activar los avisos desde la app instalada.
+- Si el navegador bloqueó los avisos, se permiten desde el candado junto a la dirección.
+- Al tocar **Salir**, ese dispositivo deja de recibir avisos.
+
 ## Seguridad
 
 - Cada usuario solo puede hacer lo que su rol permite; las reglas están en la base de datos, no solo en la pantalla.
