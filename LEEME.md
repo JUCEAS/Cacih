@@ -11,6 +11,7 @@ Base de datos: Supabase, proyecto **cacih** (`yjvhdkwdylrduunkbykw`).
 | --- | --- |
 | `index.html` | Pantalla y estilos de la app |
 | `app.js` | Funcionamiento de la app (desde la versión 1.3) |
+| `logo-cacih.png`, `logo-icono.png` | Logo de CACIH (desde la versión 1.4) |
 | `vendor/` | Librerías de apoyo, incluidas en la app (6 archivos) |
 | `sw.js` | Permite abrirla sin señal |
 | `manifest.webmanifest` | Nombre e ícono al instalarla |
@@ -88,6 +89,37 @@ Llega primero un aviso de prueba.
 - **iPhone:** primero hay que instalar la app (Compartir → Agregar a inicio) y activar los avisos desde la app instalada.
 - Si el navegador bloqueó los avisos, se permiten desde el candado junto a la dirección.
 - Al tocar **Salir**, ese dispositivo deja de recibir avisos.
+
+## Versión 1.4 · Formato oficial de CACIH
+
+La app y la ficha impresa siguen el formato en papel "Ficha de registro de ingreso" de CACIH (secciones 1 a 11, mismos textos legales y logo real).
+
+### Instalar la 1.4
+
+1. Supabase → **SQL Editor** → pegue y ejecute `actualizacion-v1.4.sql` (permite registrar actualizaciones de datos).
+2. GitHub → suba `index.html`, `app.js`, `sw.js`, `logo-cacih.png` y `logo-icono.png`.
+3. Cierre y vuelva a abrir la app. En *Parámetros* debe decir **Versión de la app 1.4.0**.
+
+### Pasos del formulario
+
+1. Datos generales (tipo de ficha: Socio o Ahorro con propósito; Nueva o Actualización; nombres en 4 casillas, conocido como, documento, país emisor, nacionalidades, EE. UU.)
+2. Localización (dirección detallada, teléfono fijo, 2 celulares, tiempo de residir, GPS)
+3. Actividad económica (profesión, oficio, ocupación; preguntas de comerciante o de empleado según el caso)
+4. Información financiera (fuentes de ingreso, remesas, ahorro inicial y cuota)
+5. PEP en los últimos 4 años y vínculos con el consejo o empleados de CACIH
+6. Referencias familiar, personal y bancaria (más cónyuge)
+7. Beneficiarios
+8. Documentos: foto, documento y firma
+9. Declaraciones: notificaciones, vinculación, actualización, certificación, origen de fondos y estatutos
+10. Revisar y enviar
+
+### Actualización de datos
+
+Si el socio ya existe, elija **Actualización** y escriba su Cliente Nº. Al aprobarla, la oficina no genera un código nuevo.
+
+### Encabezado de la ficha
+
+Nombre legal, dirección, teléfonos y correo se cambian en *Parámetros*.
 
 ## Versión 1.3 · Ficha ampliada y seguridad reforzada
 

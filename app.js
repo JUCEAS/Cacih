@@ -1,7 +1,7 @@
 /* ================= Configuración ================= */
 const SUPABASE_URL='https://yjvhdkwdylrduunkbykw.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlqdmhka3dkeWxyZHV1bmtieWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyNjc1NzQsImV4cCI6MjEwNzg0MzU3NH0.r0b7VfCZIbTuEE7KA0vD-gUVfoZSfJSnyu-sLr-Xv2s';
-const VERSION='1.3.2';
+const VERSION='1.4.0';
 const VAPID_PUBLIC='BKdmYfjnL3uiR_q1sSb18aNBr2QnrcuWiZYZ8qwFTISiMWAzmgXHJcDMeQZGihYobRFfrj2FlSH1oXocK37StQo';
 const LIBS={
   xlsx:'vendor/xlsx.full.min.js',
@@ -12,10 +12,22 @@ const _libs={};
 function loadScript(k){return _libs[k]||(_libs[k]=new Promise((res,rej)=>{const s=document.createElement('script');s.src=LIBS[k];s.onload=res;s.onerror=()=>{delete _libs[k];rej(new Error('No se pudo cargar la herramienta de exportación. Revise la conexión.'))};document.head.appendChild(s)}))}
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
 
-const STEPS=[{k:'A',t:'Identificación'},{k:'B',t:'Domicilio'},{k:'C',t:'Actividad'},{k:'D',t:'Ahorro'},{k:'E',t:'Beneficiarios y referencias'},{k:'F',t:'Documentos'},{k:'G',t:'Declaraciones'},{k:'H',t:'Revisar y enviar'}];
+const STEPS=[{k:'1',t:'Datos generales'},{k:'2',t:'Localización'},{k:'3',t:'Actividad económica'},{k:'4',t:'Información financiera'},{k:'5',t:'PEP y vínculos'},{k:'6',t:'Referencias'},{k:'7',t:'Beneficiarios'},{k:'8',t:'Documentos'},{k:'9',t:'Declaraciones'},{k:'✓',t:'Revisar y enviar'}];
+const LAST=STEPS.length-1,STEP_DOCS=7;
 const DEPTOS=['Atlántida','Choluteca','Colón','Comayagua','Copán','Cortés','El Paraíso','Francisco Morazán','Gracias a Dios','Intibucá','Islas de la Bahía','La Paz','Lempira','Ocotepeque','Olancho','Santa Bárbara','Valle','Yoro'];
-const DECL=['Declaro que los fondos que depositaré provienen de actividades lícitas.','Conozco y acepto los estatutos y el reglamento de ahorro y crédito de la caja.','Me comprometo a asistir a las asambleas y reuniones ordinarias.','Sé que mis aportaciones a capital no se devuelven antes del plazo que fijan los estatutos.'];
-const DEFAULT_PARAMS={nombre:'CACIH',lema:'Un camino hacia la inversión estratégica',registro:'',inscripcion:50,aportacion:200,ahorro_min:100,frecuencia:'Mensual',acepta_menores:true,exportar_solo_admin:true,minutos_inactividad:15};
+const TXT={
+  notif:'Doy por aceptadas y legalmente notificadas cualquier comunicación que CACIH me haga llegar a través de cualquiera de los medios de localización, sea vía telefónica, mensajitos, e-mail o correspondencia directa que haga llegar a mi domicilio declarado, aunque no haya confirmado la recepción de la misma y no haya notificado cualquier cambio en mi información.',
+  vinc:n=>`Con la suscripción del presente formulario, solicito mi vinculación como cliente de la ${String(n||'Caja de Ahorro y Crédito Inversiones de Honduras').toUpperCase()}, que en lo adelante se denominará como CACIH. Igual manifiesto que he leído y completado este formulario de manera libre y voluntaria, declarando que la información suministrada es verídica y exacta.`,
+  benef:'A la vez autorizo de forma expresa e irrevocable a CACIH para que, en caso de fallecimiento de mi persona, en pleno juicio de mis facultades, designo como beneficiarios de mis derechos y ahorros que correspondan por la apertura de la presente cuenta a:',
+  act:'Reconozco que soy el primer responsable en comunicar cualquier cambio en los datos y demás información suministrada en el presente formulario, por lo que me obligo a actualizar la misma y suministrar cualquier documento que CACIH requiera según sus políticas internas o en los casos que mi situación cambie.',
+  cert:'En carácter de declaración jurada, certifico que toda la información que aparece en el presente formulario, según mi leal saber y entender, es verdadera, correcta y completa, y estoy enterado que la misma no garantiza que mi petición de crédito o cualquier otro servicio que solicite a CACIH sea resuelto favorablemente si a los intereses de CACIH no quiere o no puede resolverlo.'};
+const declTextos=()=>[
+  {t:'9. Declaración de vinculación',x:TXT.vinc(S.params.nombre_legal)},
+  {t:'10. Actualización de la información',x:TXT.act},
+  {t:'11. Certificación del cliente (declaración jurada)',x:TXT.cert},
+  {t:'Origen de los fondos',x:'Declaro que los fondos que depositaré provienen de actividades lícitas.'},
+  {t:'Estatutos y reglamento',x:'Conozco y acepto los estatutos y el reglamento de la caja, me comprometo a asistir a las asambleas y sé que mis aportaciones a capital no se devuelven antes del plazo que fijan los estatutos.'}];
+const DEFAULT_PARAMS={nombre:'CACIH',lema:'Un camino hacia la inversión estratégica',registro:'',inscripcion:50,aportacion:200,ahorro_min:100,frecuencia:'Mensual',acepta_menores:true,exportar_solo_admin:true,minutos_inactividad:15,nombre_legal:'Caja de Ahorro y Crédito Inversiones de Honduras',direccion:'Colonia Lempira, Edificio ADICH, Juticalpa, Olancho',telefonos:'2785-1542 / 9865-9374 / 9913-3842',correo:'cacih.cajadeahorroycredito@gmail.com'};
 
 /* ================= IndexedDB mínimo (borrador y cola sin conexión) ================= */
 const idb={_db:null,
@@ -41,13 +53,32 @@ function errMsg(e){const m=(e&&(e.message||e.error_description))||String(e);
   if(/Invalid login/i.test(m))return 'Correo o contraseña incorrectos.';
   if(/Email not confirmed/i.test(m))return 'Falta confirmar el correo. Revise su bandeja de entrada o pida a la oficina que lo active.';
   if(/already registered/i.test(m))return 'Ese correo ya tiene una cuenta. Use Entrar.';
-  if(/solicitudes_dni_vigente|duplicate key.*dni/i.test(m))return 'Ya existe una solicitud vigente con ese documento.';
+  if(/solicitudes_dni_(nueva_)?vigente|duplicate key.*dni/i.test(m))return 'Ya existe una solicitud vigente con ese documento.';
   if(/documento_valido|dni_check/i.test(m))return 'El número de documento no tiene el formato correcto.';
   if(/Failed to fetch|NetworkError|network/i.test(m))return 'Sin conexión. Intente de nuevo cuando haya señal.';
   return m}
 
-function blankDraft(){const p=S.params;return{client_id:uuid(),nombres:'',apellidos:'',dni:'',nac:'',sexo:'',civil:'',escolaridad:'',depend:'',aldea:'',municipio:'',depto:'Olancho',ref:'',cel:'',wa:true,cel2:'',email:'',vivienda:'',actividad:'',rubro:'',fuente:'',ingreso:'',pep:'No',pepCargo:'',ahorroIni:Number(p.ahorro_min),ahorroMes:Number(p.ahorro_min),frecuencia:p.frecuencia,pago:'Efectivo en reunión',boleta:'',benef:[{n:'',dni:'',p:'',pct:100}],tutor:{n:'',dni:'',p:''},decl:[false,false,false,false],consent:false,waAvisos:false,fotoDni1:'',fotoDni2:'',firma:'',tipoDoc:'DNI',docVence:'',nacionalidad:'Hondureña',lugarNac:'',llenado:'',lat:null,lng:null,gpsPrec:null,negocio:'',negocioDir:'',conyuge:{n:'',dni:'',tel:''},famDir:'No',famDirDet:'',refs:[{n:'',tel:'',rel:''},{n:'',tel:'',rel:''}],selfie:'',aRuego:false,testigo:{n:'',dni:''},firmaTestigo:''}}
-function completarDraft(d){const b=blankDraft();for(const k in b)if(d[k]===undefined)d[k]=b[k];return d}
+function blankDraft(){const p=S.params;const fila=o=>[0,1,2].map(()=>({...o}));return{client_id:uuid(),
+  tipoCuenta:'Socio',tipoSolicitud:'Nueva',codigoAnterior:'',
+  n1:'',n2:'',a1:'',a2:'',conocido:'',tipoDoc:'DNI',dni:'',docVence:'',paisEmisor:'Honduras',lugarNac:'',nac:'',nacionalidad:'Hondureña',paisRes:'Honduras',sexo:'',civil:'',escolaridad:'',depend:'',
+  otraNac:'',otrosPaises:[{pais:'',tipo:''},{pais:'',tipo:''}],eeuu:'',
+  direccion:'',aldea:'',municipio:'',depto:'Olancho',pais:'Honduras',ref:'',telFijo:'',cel:'',wa:true,cel2:'',email:'',vivienda:'',tiempoRes:'',llenado:'',lat:null,lng:null,gpsPrec:null,
+  profesion:'',oficio:'',ocupacion:'',ocupacionOtra:'',actividadCom:'',actividadOtra:'',puntoFijo:'',local:'',negocio:'',negocioDir:'',negTel:'',negCel:'',negEmail:'',
+  empleo:{empresa:'',tipo:'',antiguedad:'',cargo:'',actividad:'',direccion:'',telefonos:''},
+  fuentes:'',ingreso:'',remesas:'',remMonto:'',remFrec:'',
+  ahorroIni:Number(p.ahorro_min),ahorroMes:Number(p.ahorro_min),frecuencia:p.frecuencia,pago:'Efectivo en reunión',boleta:'',
+  pep:'',peps:fila({institucion:'',cargo:'',periodo:''}),vinculo:'',vinculos:fila({nombre:'',cargo:'',parentesco:''}),
+  refFam:{n:'',p:'',tel:''},refPer:{n:'',p:'',tel:''},refBanco:'',conyuge:{n:'',dni:'',tel:''},
+  benef:[{n:'',dni:'',p:'',pct:100}],tutor:{n:'',dni:'',p:''},
+  fotoDni1:'',fotoDni2:'',selfie:'',firma:'',aRuego:false,testigo:{n:'',dni:''},firmaTestigo:'',
+  notif:'',decl:[false,false,false,false,false],consent:false,waAvisos:false}}
+function completarDraft(d){const b=blankDraft();for(const k in b)if(d[k]===undefined)d[k]=b[k];if(!Array.isArray(d.decl)||d.decl.length!==b.decl.length)d.decl=b.decl;return d}
+const nombreCompleto=d=>[d.n1,d.n2,d.a1,d.a2].map(x=>String(x||'').trim()).filter(Boolean).join(' ');
+const esComerciante=d=>d.ocupacion==='Comerciante individual';
+const esEmpleado=d=>['Empleado privado','Empleado público'].includes(d.ocupacion);
+const tel8=v=>/^\d{4}-?\d{4}$/.test(v||'');
+const ocupTxt=d=>d.ocupacion==='Otro'?('Otro: '+d.ocupacionOtra.trim()):d.ocupacion;
+const actComTxt=d=>d.actividadCom==='Otra'?('Otra: '+d.actividadOtra.trim()):d.actividadCom;
 let saveT;function saveDraft(){clearTimeout(saveT);saveT=setTimeout(()=>idb.set('draft',S.draft).catch(()=>{}),300)}
 async function saveQueue(){try{await idb.set('queue',S.queue)}catch(e){}}
 
@@ -55,84 +86,127 @@ async function saveQueue(){try{await idb.set('queue',S.queue)}catch(e){}}
 function validate(step){
   const d=S.draft,e={},a=edad(d.nac),p=S.params;
   if(step===0){
-    if(!d.nombres.trim())e.nombres='Escriba los nombres como aparecen en el DNI.';
-    if(!d.apellidos.trim())e.apellidos='Escriba los apellidos.';
+    if(!d.n1.trim())e.n1='Escriba el primer nombre como aparece en el documento.';
+    if(!d.a1.trim())e.a1='Escriba el primer apellido.';
     if(d.tipoDoc==='DNI'?!/^\d{13}$/.test(d.dni):!/^[A-Za-z0-9-]{5,20}$/.test(d.dni))e.dni=d.tipoDoc==='DNI'?'El DNI debe tener 13 dígitos.':'Número de documento de 5 a 20 letras o números.';
-    else if(S.queue.some(q=>q.d.dni===d.dni&&q.d.client_id!==d.client_id))e.dni='Este documento ya está en su cola de envío.';
+    else if(d.tipoSolicitud==='Nueva'&&S.queue.some(q=>q.d.dni===d.dni&&q.d.client_id!==d.client_id))e.dni='Este documento ya está en su cola de envío.';
+    if(!d.paisEmisor.trim())e.paisEmisor='Indique el país que emitió el documento.';
     if(!d.docVence)e.docVence='Indique la fecha de vencimiento del documento.';
     else if(new Date(d.docVence+'T23:59')<new Date())e.docVence='El documento está vencido. Pida al solicitante que lo renueve antes de afiliarse.';
-    if(!d.nacionalidad.trim())e.nacionalidad='Indique la nacionalidad.';
     if(!d.lugarNac.trim())e.lugarNac='Indique el lugar de nacimiento.';
     if(!d.nac)e.nac='Indique la fecha de nacimiento.';
     else if(a<0||a>110)e.nac='Revise la fecha de nacimiento.';
     else if(a<18&&!p.acepta_menores)e.nac='La caja no está aceptando socios menores de edad.';
+    if(!d.nacionalidad.trim())e.nacionalidad='Indique la nacionalidad.';
+    if(!d.paisRes.trim())e.paisRes='Indique el país de residencia.';
     if(!d.sexo)e.sexo='Seleccione una opción.';
+    if(!d.otraNac)e.otraNac='Responda Sí o No.';
+    else if(d.otraNac==='Sí'&&(!d.otrosPaises[0].pais.trim()||!d.otrosPaises[0].tipo))e.otrosPaises='Indique al menos un país y si es nacionalidad o residencia.';
+    if(!d.eeuu)e.eeuu='Responda Sí o No.';
   }
   if(step===1){
-    if(!d.aldea.trim())e.aldea='Indique aldea, caserío o barrio.';
+    if(!d.direccion.trim())e.direccion='Detalle la dirección: barrio o colonia, calle, referencia y color de casa.';
+    if(!d.aldea.trim())e.aldea='Indique aldea o caserío.';
     if(!d.municipio.trim())e.municipio='Indique el municipio.';
-    if(!/^\d{4}-?\d{4}$/.test(d.cel))e.cel='Celular de 8 dígitos (ej. 9876-5432).';
+    if(!tel8(d.cel))e.cel='Celular de 8 dígitos (ej. 9876-5432).';
+    if(!d.vivienda)e.vivienda='Seleccione una opción.';
     if(!d.llenado)e.llenado='Indique dónde se llena la solicitud.';
     else if(d.llenado==='Vivienda del solicitante'&&d.lat==null)e.gps='Guarde la ubicación GPS de la vivienda.';
   }
   if(step===2){
-    if(!d.actividad)e.actividad='Seleccione la actividad principal.';
-    if(!d.fuente)e.fuente='Seleccione la fuente de ingresos.';
-    if(!d.ingreso)e.ingreso='Seleccione un rango.';
-    if(d.pep==='Sí'&&!d.pepCargo.trim())e.pepCargo='Indique el cargo.';
-    if(conPareja(d)&&!d.conyuge.n.trim())e.conyuge='Escriba el nombre del cónyuge o compañero/a.';
-    else if(conPareja(d)&&d.conyuge.dni&&!/^\d{13}$/.test(d.conyuge.dni))e.conyuge='El DNI del cónyuge debe tener 13 dígitos (o dejarlo vacío).';
-    if(d.famDir==='Sí'&&!d.famDirDet.trim())e.famDirDet='Indique el directivo y el parentesco.';
+    if(!d.ocupacion)e.ocupacion='Seleccione la ocupación.';
+    else if(d.ocupacion==='Otro'&&!d.ocupacionOtra.trim())e.ocupacionOtra='Indique cuál.';
+    if(esComerciante(d)){
+      if(!d.actividadCom)e.actividadCom='Seleccione la actividad principal.';
+      else if(d.actividadCom==='Otra'&&!d.actividadOtra.trim())e.actividadOtra='Detalle la actividad.';
+      if(!d.puntoFijo)e.puntoFijo='Responda Sí o No.';
+      else if(d.puntoFijo==='Sí'&&!d.local)e.local='Seleccione una opción.';
+      if(!d.negocio.trim())e.negocio='Escriba el nombre del negocio.';
+      if(!d.negocioDir.trim())e.negocioDir='Indique la ubicación del negocio.';
+    }
+    if(esEmpleado(d)){
+      const m=d.empleo;
+      if(!m.empresa.trim()||!m.tipo||!m.cargo.trim()||!m.antiguedad.trim())e.empleo='Complete empresa, tipo de empresa, cargo y antigüedad laboral.';
+    }
   }
   if(step===3){
+    if(!d.fuentes.trim())e.fuentes='Indique la principal fuente de ingreso.';
+    if(!d.ingreso)e.ingreso='Seleccione un rango.';
+    if(!d.remesas)e.remesas='Responda Sí o No.';
+    else if(d.remesas==='Sí'){if(!(Number(d.remMonto)>0))e.remMonto='Indique el monto promedio.';if(!d.remFrec)e.remFrec='Seleccione la frecuencia.'}
     if(Number(d.ahorroIni)<Number(p.ahorro_min))e.ahorroIni='El ahorro inicial mínimo es '+L(p.ahorro_min)+'.';
     if(Number(d.ahorroMes)<Number(p.ahorro_min))e.ahorroMes='La cuota mínima es '+L(p.ahorro_min)+'.';
     if(d.pago==='Depósito a cuenta de la caja'&&!d.boleta.trim())e.boleta='Anote el número de boleta.';
   }
   if(step===4){
+    if(!d.pep)e.pep='Responda Sí o No.';
+    else if(d.pep==='Sí'){const r=d.peps[0];if(!r.institucion.trim()||!r.cargo.trim()||!r.periodo.trim())e.peps='Complete institución, cargo y período del primer cargo.'}
+    if(!d.vinculo)e.vinculo='Responda Sí o No.';
+    else if(d.vinculo==='Sí'){const r=d.vinculos[0];if(!r.nombre.trim()||!r.cargo.trim()||!r.parentesco.trim())e.vinculos='Complete nombre, cargo y parentesco de la primera persona.'}
+  }
+  if(step===5){
+    for(const[k,t]of[['refFam','familiar'],['refPer','personal']]){const r=d[k];if(!r.n.trim()||!r.p.trim()||!tel8(r.tel))e[k]=`Complete la referencia ${t}: nombre, parentesco y teléfono de 8 dígitos.`}
+    if(conPareja(d)&&!d.conyuge.n.trim())e.conyuge='Escriba el nombre del cónyuge o compañero/a.';
+    else if(conPareja(d)&&d.conyuge.dni&&!/^\d{13}$/.test(d.conyuge.dni))e.conyuge='El DNI del cónyuge debe tener 13 dígitos (o dejarlo vacío).';
+  }
+  if(step===6){
     const t=d.benef.reduce((s,b)=>s+Number(b.pct||0),0);
     if(d.benef.some(b=>!b.n.trim()||!b.p))e.benef='Complete nombre y parentesco de cada beneficiario.';
     else if(d.benef.some(b=>b.dni&&!/^\d{13}$/.test(b.dni)))e.benef='El DNI de un beneficiario debe tener 13 dígitos (o dejarlo vacío).';
     else if(t!==100)e.benef='Los porcentajes suman '+t+'%; deben sumar 100%.';
     if(a!==null&&a<18&&(!d.tutor.n.trim()||!/^\d{13}$/.test(d.tutor.dni)))e.tutor='Socio menor de edad: complete nombre y DNI del padre, madre o tutor.';
-    if(d.refs.some(r=>!r.n.trim()||!r.rel||!/^\d{4}-?\d{4}$/.test(r.tel)))e.refs='Complete las dos referencias: nombre, relación y teléfono de 8 dígitos.';
   }
-  if(step===5){
-    if(!d.fotoDni1)e.fotoDni1='Agregue la foto del frente del DNI.';
+  if(step===7){
     if(!d.selfie)e.selfie='Tome una foto del rostro del solicitante.';
+    if(!d.fotoDni1)e.fotoDni1='Agregue la foto del frente del documento.';
     if(!d.firma)e.firma=d.aRuego?'Marque la huella del solicitante en el recuadro.':'El solicitante debe firmar o marcar su huella.';
     if(d.aRuego&&(!d.testigo.n.trim()||!/^\d{13}$/.test(d.testigo.dni)))e.testigo='Complete nombre y DNI (13 dígitos) del testigo.';
     else if(d.aRuego&&!d.firmaTestigo)e.firmaTestigo='Falta la firma del testigo.';
   }
-  if(step===6){
-    if(d.decl.some(x=>!x))e.decl='El solicitante debe aceptar las cuatro declaraciones.';
+  if(step===8){
+    if(!d.notif)e.notif='Indique si autoriza las notificaciones.';
+    if(d.decl.some(x=>!x))e.decl='El solicitante debe aceptar todas las declaraciones.';
     if(!d.consent)e.consent='Sin la autorización de datos no se puede registrar la solicitud.';
   }
   return e;
 }
 const conPareja=d=>['Casado/a','Unión libre'].includes(d.civil);
-const firstInvalid=()=>{for(let i=0;i<7;i++)if(Object.keys(validate(i)).length)return i;return -1};
+const firstInvalid=()=>{for(let i=0;i<LAST;i++)if(Object.keys(validate(i)).length)return i;return -1};
 
 /* ================= Envío y cola sin conexión ================= */
 function dataURLtoBlob(u){const[h,b]=u.split(',');const bin=atob(b);const a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new Blob([a],{type:h.match(/:(.*?);/)[1]})}
 function toRow(d,paths){
+  const t=v=>String(v??'').trim()||null,com=esComerciante(d),emp=esEmpleado(d),pep=d.pep==='Sí',vin=d.vinculo==='Sí';
+  const peps=pep?d.peps.filter(r=>r.institucion.trim()).map(r=>({institucion:r.institucion.trim(),cargo:r.cargo.trim(),periodo:r.periodo.trim()})):[];
+  const vins=vin?d.vinculos.filter(r=>r.nombre.trim()).map(r=>({nombre:r.nombre.trim(),cargo:r.cargo.trim(),parentesco:r.parentesco.trim()})):[];
   return{client_id:d.client_id,promotor_nombre:S.perfil.nombre||S.session.user.email,
-    nombres:d.nombres.trim(),apellidos:d.apellidos.trim(),dni:d.dni,fecha_nacimiento:d.nac,sexo:d.sexo,estado_civil:d.civil||null,escolaridad:d.escolaridad||null,dependientes:d.depend===''?null:Number(d.depend),
-    aldea:d.aldea.trim(),municipio:d.municipio.trim(),departamento:d.depto,referencia:d.ref||null,celular:d.cel,whatsapp:!!d.wa,telefono_alterno:d.cel2||null,email:d.email||null,vivienda:d.vivienda||null,
-    actividad:d.actividad,rubro:d.rubro||null,fuente_ingresos:d.fuente,rango_ingreso:d.ingreso,es_pep:d.pep==='Sí',pep_cargo:d.pep==='Sí'?d.pepCargo:null,
+    tipo_cuenta:d.tipoCuenta,tipo_solicitud:d.tipoSolicitud,codigo_anterior:d.tipoSolicitud==='Actualización'?t(d.codigoAnterior):null,
+    primer_nombre:d.n1.trim(),segundo_nombre:t(d.n2),primer_apellido:d.a1.trim(),segundo_apellido:t(d.a2),conocido_como:t(d.conocido),
+    nombres:[d.n1,d.n2].map(x=>x.trim()).filter(Boolean).join(' '),apellidos:[d.a1,d.a2].map(x=>x.trim()).filter(Boolean).join(' '),
+    tipo_documento:d.tipoDoc,dni:d.dni,documento_vencimiento:d.docVence||null,pais_emisor:t(d.paisEmisor),
+    lugar_nacimiento:t(d.lugarNac),fecha_nacimiento:d.nac,nacionalidad:d.nacionalidad.trim(),pais_residencia:t(d.paisRes),
+    sexo:d.sexo,estado_civil:d.civil||null,escolaridad:d.escolaridad||null,dependientes:d.depend===''?null:Number(d.depend),
+    otra_nacionalidad:d.otraNac==='Sí',otros_paises:d.otraNac==='Sí'?d.otrosPaises.filter(x=>x.pais.trim()).map(x=>({pais:x.pais.trim(),tipo:x.tipo||''})):[],nacionalidad_eeuu:d.eeuu==='Sí',
+    direccion:t(d.direccion),aldea:d.aldea.trim(),municipio:d.municipio.trim(),departamento:d.depto,pais:t(d.pais),referencia:null,
+    telefono_fijo:t(d.telFijo),celular:d.cel,whatsapp:!!d.wa,telefono_alterno:t(d.cel2),email:t(d.email),vivienda:d.vivienda||null,tiempo_residencia:t(d.tiempoRes),
+    lugar_llenado:d.llenado||null,latitud:d.lat,longitud:d.lng,gps_precision_m:d.gpsPrec,
+    profesion:t(d.profesion),oficio:t(d.oficio),ocupacion:ocupTxt(d),actividad:com?'Comerciante · '+actComTxt(d):ocupTxt(d),rubro:null,
+    actividad_comercial:com?actComTxt(d):null,negocio_punto_fijo:com?d.puntoFijo==='Sí':null,negocio_local:com&&d.puntoFijo==='Sí'?d.local:null,
+    negocio_nombre:com?t(d.negocio):null,negocio_direccion:com?t(d.negocioDir):null,negocio_telefono:com?t(d.negTel):null,negocio_celular:com?t(d.negCel):null,negocio_email:com?t(d.negEmail):null,
+    empleo:emp?Object.fromEntries(Object.entries(d.empleo).map(([k,v])=>[k,String(v||'').trim()])):null,
+    fuente_ingresos:d.fuentes.trim(),rango_ingreso:d.ingreso,recibe_remesas:d.remesas==='Sí',remesas_monto:d.remesas==='Sí'?Number(d.remMonto):null,remesas_frecuencia:d.remesas==='Sí'?d.remFrec:null,
+    es_pep:pep,pep_cargo:pep?peps.map(r=>`${r.cargo} (${r.institucion}, ${r.periodo})`).join('; '):null,pep_detalle:peps,
+    familiar_directivo:vin,familiar_directivo_detalle:vin?vins.map(r=>`${r.nombre} · ${r.cargo} · ${r.parentesco}`).join('; '):null,vinculos:vins,
+    autoriza_notificaciones:d.notif==='Sí',
+    referencias:[{tipo:'Familiar',nombre:d.refFam.n.trim(),relacion:d.refFam.p.trim(),telefono:d.refFam.tel},{tipo:'Personal',nombre:d.refPer.n.trim(),relacion:d.refPer.p.trim(),telefono:d.refPer.tel}],
+    referencia_bancaria:t(d.refBanco),
+    conyuge:conPareja(d)&&d.conyuge.n.trim()?{nombre:d.conyuge.n.trim(),dni:d.conyuge.dni||null,telefono:d.conyuge.tel||null}:null,
     ahorro_inicial:Number(d.ahorroIni),ahorro_periodo:Number(d.ahorroMes),frecuencia:d.frecuencia,forma_pago:d.pago,boleta:d.pago==='Depósito a cuenta de la caja'?d.boleta:null,
     beneficiarios:d.benef.map(b=>({nombre:b.n.trim(),dni:b.dni||null,parentesco:b.p,porcentaje:Number(b.pct)})),
     tutor:(edad(d.nac)<18&&d.tutor.n)?{nombre:d.tutor.n,dni:d.tutor.dni,parentesco:d.tutor.p}:null,
-    foto_dni_frente:paths.f1||null,foto_dni_reverso:paths.f2||null,firma:paths.firma||null,
-    declaraciones:d.decl.every(Boolean),consentimiento_datos:!!d.consent,avisos_whatsapp:!!d.waAvisos,
-    tipo_documento:d.tipoDoc,documento_vencimiento:d.docVence||null,nacionalidad:d.nacionalidad.trim(),lugar_nacimiento:d.lugarNac.trim()||null,
-    lugar_llenado:d.llenado||null,latitud:d.lat,longitud:d.lng,gps_precision_m:d.gpsPrec,
-    negocio_nombre:d.negocio.trim()||null,negocio_direccion:d.negocioDir.trim()||null,
-    conyuge:conPareja(d)&&d.conyuge.n.trim()?{nombre:d.conyuge.n.trim(),dni:d.conyuge.dni||null,telefono:d.conyuge.tel||null}:null,
-    familiar_directivo:d.famDir==='Sí',familiar_directivo_detalle:d.famDir==='Sí'?d.famDirDet.trim():null,
-    referencias:d.refs.map(r=>({nombre:r.n.trim(),telefono:r.tel,relacion:r.rel})),
-    foto_solicitante:paths.selfie||null,firma_a_ruego:!!d.aRuego,
-    testigo:d.aRuego?{nombre:d.testigo.n.trim(),dni:d.testigo.dni}:null,firma_testigo:d.aRuego?(paths.firmaTestigo||null):null}
+    foto_dni_frente:paths.f1||null,foto_dni_reverso:paths.f2||null,firma:paths.firma||null,foto_solicitante:paths.selfie||null,
+    firma_a_ruego:!!d.aRuego,testigo:d.aRuego?{nombre:d.testigo.n.trim(),dni:d.testigo.dni}:null,firma_testigo:d.aRuego?(paths.firmaTestigo||null):null,
+    declaraciones:d.decl.every(Boolean),consentimiento_datos:!!d.consent,avisos_whatsapp:!!d.waAvisos}
 }
 async function uploadOne(item){
   const d=item.d,uid=S.session.user.id,base=uid+'/'+d.client_id+'/',paths={};
@@ -171,7 +245,7 @@ async function enviar(){
 }
 
 /* ================= Datos de oficina ================= */
-const COLS_LIST='id,folio,estado,nombres,apellidos,dni,aldea,municipio,promotor_nombre,ahorro_inicial,codigo_socio,creado_en';
+const COLS_LIST='id,folio,estado,tipo_solicitud,tipo_cuenta,nombres,apellidos,dni,aldea,municipio,promotor_nombre,ahorro_inicial,codigo_socio,creado_en';
 async function loadBandeja(){
   let q=sb.from('solicitudes').select(COLS_LIST).order('creado_en',{ascending:false}).limit(200);
   if(S.filter!=='Todas')q=q.eq('estado',S.filter);
@@ -210,17 +284,23 @@ async function exportExcel(btn){
   btn.disabled=true;const txt=btn.textContent;btn.innerHTML='<span class="spin"></span> Preparando…';
   try{await loadScript('xlsx');const rows=await fetchExport();if(!rows.length){toast('No hay solicitudes para exportar.');return}
     await registrarExport('Excel',filtroTxt(),rows.length);
-    const data=rows.map(s=>{const ben=(s.beneficiarios||[]);return{
-      'Folio':s.folio,'Estado':s.estado,'Código de socio':s.codigo_socio||'','Acta':s.acta||'','Fecha de envío':new Date(s.creado_en),'Fecha de revisión':s.revisado_en?new Date(s.revisado_en):'','Motivo de rechazo':s.motivo_rechazo||'',
-      'Nombres':s.nombres,'Apellidos':s.apellidos,'Tipo de documento':s.tipo_documento,'No. de documento':fmtDni(s.dni),'Vence':s.documento_vencimiento?s.documento_vencimiento.split('-').reverse().join('/'):'','Nacionalidad':s.nacionalidad||'','Lugar de nacimiento':s.lugar_nacimiento||'','Fecha de nacimiento':s.fecha_nacimiento.split('-').reverse().join('/'),'Edad':edad(s.fecha_nacimiento),'Sexo':s.sexo,'Estado civil':s.estado_civil||'','Escolaridad':s.escolaridad||'','Dependientes':s.dependientes??'',
-      'Aldea / barrio':s.aldea,'Municipio':s.municipio,'Departamento':s.departamento,'Referencia':s.referencia||'','Celular':s.celular,'WhatsApp':s.whatsapp?'Sí':'No','Teléfono alterno':s.telefono_alterno||'','Correo':s.email||'','Vivienda':s.vivienda||'','Lugar de llenado':s.lugar_llenado||'','Latitud':s.latitud!=null?Number(s.latitud):'','Longitud':s.longitud!=null?Number(s.longitud):'',
-      'Actividad':s.actividad,'Rubro':s.rubro||'','Fuente de ingresos':s.fuente_ingresos,'Ingreso mensual (L)':s.rango_ingreso,'PEP':s.es_pep?'Sí':'No','Cargo PEP':s.pep_cargo||'','Negocio o empleador':s.negocio_nombre||'','Dirección del negocio':s.negocio_direccion||'','Cónyuge':s.conyuge?`${s.conyuge.nombre}${s.conyuge.dni?' (DNI '+fmtDni(s.conyuge.dni)+')':''}${s.conyuge.telefono?' · '+s.conyuge.telefono:''}`:'','Familiar de directivo':s.familiar_directivo?'Sí · '+(s.familiar_directivo_detalle||''):'No',
+    const yn=x=>x==null?'':(x?'Sí':'No'),fd=x=>x?x.split('-').reverse().join('/'):'';
+    const data=rows.map(s=>{const ben=(s.beneficiarios||[]),refs=(s.referencias||[]),emp=s.empleo||{},rf=t=>{const r=refs.find(x=>x.tipo===t);return r?`${r.nombre} (${r.relacion}, ${r.telefono})`:''};return{
+      'Folio':s.folio,'Estado':s.estado,'Tipo de cuenta':s.tipo_cuenta||'','Tipo de solicitud':s.tipo_solicitud||'','Cliente Nº':s.codigo_socio||s.codigo_anterior||'','Acta':s.acta||'','Fecha de envío':new Date(s.creado_en),'Fecha de revisión':s.revisado_en?new Date(s.revisado_en):'','Motivo de rechazo':s.motivo_rechazo||'',
+      '1er nombre':s.primer_nombre||s.nombres,'2do nombre':s.segundo_nombre||'','1er apellido':s.primer_apellido||s.apellidos,'2do apellido':s.segundo_apellido||'','Conocido como':s.conocido_como||'',
+      'Tipo de documento':s.tipo_documento,'No. de documento':fmtDni(s.dni),'País emisor':s.pais_emisor||'','Vence':fd(s.documento_vencimiento),'Lugar de nacimiento':s.lugar_nacimiento||'','Fecha de nacimiento':fd(s.fecha_nacimiento),'Edad':edad(s.fecha_nacimiento),'Sexo':s.sexo,'Nacionalidad':s.nacionalidad||'','País de residencia':s.pais_residencia||'','Estado civil':s.estado_civil||'','Escolaridad':s.escolaridad||'','Dependientes':s.dependientes??'',
+      'Otra nacionalidad o residencia':yn(s.otra_nacionalidad),'Otros países':(s.otros_paises||[]).map(x=>`${x.pais} (${x.tipo})`).join('; '),'Nacionalidad o residencia EE. UU.':yn(s.nacionalidad_eeuu),
+      'Dirección':s.direccion||s.referencia||'','Aldea o caserío':s.aldea,'Municipio':s.municipio,'Departamento':s.departamento,'País':s.pais||'','Teléfono fijo':s.telefono_fijo||'','Celular 1':s.celular,'WhatsApp':s.whatsapp?'Sí':'No','Celular 2':s.telefono_alterno||'','E-mail':s.email||'','Vivienda':s.vivienda||'','Tiempo de residir':s.tiempo_residencia||'','Lugar de llenado':s.lugar_llenado||'','Latitud':s.latitud!=null?Number(s.latitud):'','Longitud':s.longitud!=null?Number(s.longitud):'',
+      'Profesión':s.profesion||'','Oficio':s.oficio||'','Ocupación':s.ocupacion||s.actividad||'','Actividad comercial':s.actividad_comercial||'','Punto fijo':yn(s.negocio_punto_fijo),'Local del negocio':s.negocio_local||'','Nombre del negocio':s.negocio_nombre||'','Ubicación del negocio':s.negocio_direccion||'','Tel. negocio':s.negocio_telefono||'','Cel. negocio':s.negocio_celular||'','E-mail negocio':s.negocio_email||'',
+      'Empresa':emp.empresa||'','Tipo de empresa':emp.tipo||'','Antigüedad laboral':emp.antiguedad||'','Cargo':emp.cargo||'','Actividad de la empresa':emp.actividad||'','Dirección de la empresa':emp.direccion||'','Tel. empresa':emp.telefonos||'',
+      'Fuentes de ingreso':s.fuente_ingresos||'','Ingreso mensual (rango)':s.rango_ingreso||'','Recibe remesas':yn(s.recibe_remesas),'Monto remesas (L)':s.remesas_monto!=null?Number(s.remesas_monto):'','Frecuencia remesas':s.remesas_frecuencia||'',
+      'PEP (últimos 4 años)':yn(s.es_pep),'Detalle PEP':s.pep_cargo||'','Vínculo con consejo o empleado de CACIH':yn(s.familiar_directivo),'Detalle del vínculo':s.familiar_directivo_detalle||'','Autoriza notificaciones':yn(s.autoriza_notificaciones),
+      'Referencia familiar':rf('Familiar'),'Referencia personal':rf('Personal')||refs.filter(x=>!x.tipo).map(r=>`${r.nombre} (${r.relacion}, ${r.telefono})`).join('; '),'Referencia bancaria':s.referencia_bancaria||'','Cónyuge':s.conyuge?`${s.conyuge.nombre}${s.conyuge.dni?' (DNI '+fmtDni(s.conyuge.dni)+')':''}${s.conyuge.telefono?' · '+s.conyuge.telefono:''}`:'',
       'Ahorro inicial (L)':Number(s.ahorro_inicial),'Ahorro por periodo (L)':Number(s.ahorro_periodo),'Frecuencia':s.frecuencia,'Forma de pago':s.forma_pago,'Boleta':s.boleta||'',
       'Beneficiarios':ben.map(b=>`${b.nombre} (${b.parentesco}, ${b.porcentaje}%${b.dni?', DNI '+fmtDni(b.dni):''})`).join('; '),
-      'Referencias':(s.referencias||[]).map(r=>`${r.nombre} (${r.relacion}, ${r.telefono})`).join('; '),
       'Tutor':s.tutor?`${s.tutor.nombre} (DNI ${fmtDni(s.tutor.dni)}, ${s.tutor.parentesco||''})`:'',
       'Declaraciones':s.declaraciones?'Sí':'No','Autoriza datos':s.consentimiento_datos?'Sí':'No','Avisos WhatsApp':s.avisos_whatsapp?'Sí':'No',
-      'Foto DNI':s.foto_dni_frente?'Sí':'No','Foto solicitante':s.foto_solicitante?'Sí':'No','Firma':s.firma?'Sí':'No','Firma a ruego':s.firma_a_ruego?`Sí · testigo ${s.testigo?.nombre||''} (DNI ${fmtDni(s.testigo?.dni)})`:'No','Promotor':s.promotor_nombre}});
+      'Foto documento':s.foto_dni_frente?'Sí':'No','Foto solicitante':s.foto_solicitante?'Sí':'No','Firma':s.firma?'Sí':'No','Firma a ruego':s.firma_a_ruego?`Sí · testigo ${s.testigo?.nombre||''} (DNI ${fmtDni(s.testigo?.dni)})`:'No','Promotor':s.promotor_nombre}});
     const ws=XLSX.utils.json_to_sheet(data,{cellDates:true,dateNF:'dd/mm/yyyy'});
     const keys=Object.keys(data[0]);ws['!cols']=keys.map(k=>({wch:Math.min(40,Math.max(k.length+2,...data.slice(0,200).map(r=>String(r[k]??'').length+1)))}));
     ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:data.length,c:keys.length-1}})};ws['!freeze']={xSplit:2,ySplit:1};
@@ -256,12 +336,17 @@ async function fichaPDF(btn){
   try{await loadScript('html2canvas');await loadScript('jspdf');await registrarExport('PDF ficha',S.detail.s.folio,1);
     const area=$('#pdfArea');area.innerHTML=fichaHTML(S.detail.s,S.detail.urls);
     await Promise.all([...area.querySelectorAll('img')].map(i=>i.complete?0:new Promise(r=>{i.onload=i.onerror=r})));
-    const canvas=await html2canvas(area.firstElementChild,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
+    const sheet=area.firstElementChild,top0=sheet.getBoundingClientRect().top;
+    const cuts=[...sheet.querySelectorAll('h4,tr,p,.sigs,.foot,.tit,.tit2')].map(e=>Math.round((e.getBoundingClientRect().top-top0)*2)).sort((x,y)=>x-y);
+    const canvas=await html2canvas(sheet,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
     const{jsPDF}=window.jspdf;const doc=new jsPDF({unit:'pt',format:'letter'});
     const pw=doc.internal.pageSize.getWidth(),ph=doc.internal.pageSize.getHeight(),m=24,iw=pw-2*m,pageH=Math.floor(canvas.width*(ph-2*m)/iw);
     if(canvas.height<=pageH*1.4){const k=Math.min(1,pageH/canvas.height),w=iw*k;doc.addImage(canvas.toDataURL('image/jpeg',.92),'JPEG',(pw-w)/2,m,w,canvas.height*w/canvas.width)}
-    else for(let y=0,p=0;y<canvas.height;y+=pageH,p++){const h=Math.min(pageH,canvas.height-y),c=document.createElement('canvas');c.width=canvas.width;c.height=h;c.getContext('2d').drawImage(canvas,0,y,canvas.width,h,0,0,canvas.width,h);
-      if(p)doc.addPage();doc.addImage(c.toDataURL('image/jpeg',.92),'JPEG',m,m,iw,h*iw/canvas.width)}
+    else{let ph2=pageH;if(canvas.height>pageH*2&&canvas.height<=pageH*2.35)ph2=Math.ceil(canvas.height/2)+60;
+      const k=Math.min(1,pageH/ph2),w=iw*k,x0=(pw-w)/2;let y=0,n=0;
+      while(y<canvas.height-4){let end=y+ph2;if(end<canvas.height){const c=cuts.filter(v=>v>y+ph2*0.5&&v<=end).pop();if(c)end=c}end=Math.min(end,canvas.height);
+        const h=end-y,c=document.createElement('canvas');c.width=canvas.width;c.height=h;c.getContext('2d').drawImage(canvas,0,y,canvas.width,h,0,0,canvas.width,h);
+        if(n)doc.addPage();doc.addImage(c.toDataURL('image/jpeg',.92),'JPEG',x0,m,w,h*w/canvas.width);doc.setFontSize(8);doc.setTextColor(120);doc.text('Página '+(n+1),pw-m,ph-10,{align:'right'});y=end;n++}}
     const s=S.detail.s;doc.save(`Ficha_${s.codigo_socio||s.folio}_${(s.apellidos+'_'+s.nombres).replace(/\s+/g,'_')}.pdf`);area.innerHTML='';toast('Ficha descargada en PDF')}
   catch(e){toast(errMsg(e),4000)}finally{btn.disabled=false;btn.textContent=txt}}
 
@@ -302,10 +387,14 @@ function irA(hash){
 /* ================= Vistas ================= */
 const err=k=>S.errors[k]?`<span class="err">${esc(S.errors[k])}</span>`:'';
 function inp(k,label,o={}){const d=S.draft;return `<div class="f ${o.full?'full':''}"><label class="t" for="i_${k}">${label}${o.req?' <i>*</i>':''}</label><input id="i_${k}" data-k="${k}" type="${o.type||'text'}" class="${o.mono?'mono':''}" value="${esc(d[k])}" ${o.ph?`placeholder="${esc(o.ph)}"`:''} ${o.mode?`inputmode="${o.mode}"`:''} ${o.max?`maxlength="${o.max}"`:''} autocomplete="off">${o.hint?`<span class="hint">${o.hint}</span>`:''}${err(k)}</div>`}
+function inpO(ob,f,label,o={}){const v=S.draft[ob][f];return `<div class="f ${o.full?'full':''}"><label class="t" for="o_${ob}_${f}">${label}${o.req?' <i>*</i>':''}</label><input id="o_${ob}_${f}" data-o="${ob}" data-f="${f}" class="${o.mono?'mono':''}" value="${esc(v)}" ${o.ph?`placeholder="${esc(o.ph)}"`:''} ${o.mode?`inputmode="${o.mode}"`:''} ${o.max?`maxlength="${o.max}"`:''} autocomplete="off"></div>`}
+function selO(ob,f,label,opts,o={}){const v=S.draft[ob][f];return `<div class="f ${o.full?'full':''}"><label class="t" for="o_${ob}_${f}">${label}${o.req?' <i>*</i>':''}</label><select id="o_${ob}_${f}" data-o="${ob}" data-f="${f}"><option value=""></option>${opts.map(x=>`<option ${v===x?'selected':''}>${esc(x)}</option>`).join('')}</select></div>`}
+function inpA(ar,i,f,label,o={}){const v=S.draft[ar][i][f];return `<div class="f ${o.full?'full':''}"><label class="t" for="a_${ar}_${i}_${f}">${label}${o.req?' <i>*</i>':''}</label><input id="a_${ar}_${i}_${f}" data-a="${ar}" data-i="${i}" data-f="${f}" value="${esc(v)}" ${o.ph?`placeholder="${esc(o.ph)}"`:''} autocomplete="off"></div>`}
+function selA(ar,i,f,label,opts,o={}){const v=S.draft[ar][i][f];return `<div class="f ${o.full?'full':''}"><label class="t" for="a_${ar}_${i}_${f}">${label}${o.req?' <i>*</i>':''}</label><select id="a_${ar}_${i}_${f}" data-a="${ar}" data-i="${i}" data-f="${f}"><option value=""></option>${opts.map(x=>`<option ${v===x?'selected':''}>${esc(x)}</option>`).join('')}</select></div>`}
 function chips(k,label,opts,o={}){const d=S.draft;return `<div class="f ${o.full?'full':''}"><span class="t">${label}${o.req?' <i>*</i>':''}</span><div class="chips" role="radiogroup" aria-label="${esc(label)}">${opts.map((x,i)=>`<label><input type="radio" name="r_${k}" id="r_${k}_${i}" data-k="${k}" value="${esc(x)}" ${d[k]===x?'checked':''}>${esc(x)}</label>`).join('')}</div>${err(k)}</div>`}
 
 function vAuth(mode){
-  return `<div class="auth"><div class="hero"><svg width="72" height="72" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="31" fill="#b48a2c"/><circle cx="32" cy="32" r="26" fill="#173f2c"/><path d="M18 44 L28 32 L35 38 L46 22" fill="none" stroke="#f3e2b3" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 22 H46 V28" fill="none" stroke="#f3e2b3" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><b>CACIH</b><span>Un camino hacia la inversión estratégica</span></div>
+  return `<div class="auth"><div class="hero"><img src="logo-cacih.png" alt="CACIH · Un camino hacia la inversión estratégica" style="width:190px;max-width:70%;background:#fff;border-radius:14px;padding:10px 14px"></div>
   <form class="card" id="authForm" novalidate><h2>${mode==='reg'?'Crear cuenta de promotor':'Entrar'}</h2><div class="grid" style="margin-top:14px;grid-template-columns:1fr">
   ${mode==='reg'?`<div class="f"><label class="t" for="a_nombre">Nombre completo</label><input id="a_nombre" autocomplete="name" required></div>`:''}
   <div class="f"><label class="t" for="a_email">Correo</label><input id="a_email" type="email" autocomplete="email" required></div>
@@ -323,18 +412,37 @@ function vNueva(){
   if(S.busy)return `<div class="card empty"><span class="spin"></span> Enviando solicitud y documentos…</div>`;
   if(S.sent){const s=S.sent;return `<div class="card" style="text-align:center;padding:32px 20px"><h1>${s.online?'Solicitud enviada':'Guardada para enviar'}</h1><p class="lead">${s.online?'La oficina ya la recibió como pendiente de aprobación.':s.error?'No se pudo enviar: '+esc(s.error)+' Quedó en la cola.':'No hay señal. Se enviará sola cuando el teléfono tenga conexión.'}</p>${s.folio?`<p class="mono" style="font-size:24px;color:var(--accent-2);margin:12px 0">${esc(s.folio)}</p>`:''}<p class="hint">${esc(s.nombre)} · DNI ${esc(fmtDni(s.dni))}</p><div class="warnnote" style="margin-top:14px;text-align:left">Recuerde al solicitante: el ahorro inicial se entrega en la reunión o se deposita en la cuenta de la caja. El promotor no recibe dinero.</div><div class="rowbtns" style="justify-content:center"><button class="btn-primary" id="newReq">Nueva solicitud</button><button id="goEnvios">Ver mis envíos</button></div></div>`}
   const d=S.draft,s=S.step,a=edad(d.nac),p=S.params;let body='';
-  if(s===0)body=`<div class="grid">${inp('nombres','Nombres',{req:1,ph:'Como aparecen en el DNI'})}${inp('apellidos','Apellidos',{req:1})}${chips('tipoDoc','Documento de identidad',['DNI','Carné de residente','Pasaporte'],{req:1,full:1})}${d.tipoDoc==='DNI'?inp('dni','No. de DNI',{req:1,mono:1,mode:'numeric',max:13,ph:'0000000000000',hint:'13 dígitos, sin guiones'}):inp('dni','No. de '+d.tipoDoc.toLowerCase(),{req:1,mono:1,max:20,hint:'Como aparece en el documento'})}${inp('docVence','Vencimiento del documento',{req:1,type:'date'})}${inp('nacionalidad','Nacionalidad',{req:1})}${inp('lugarNac','Lugar de nacimiento',{req:1,ph:'Municipio y departamento, o país'})}${inp('nac','Fecha de nacimiento',{req:1,type:'date',hint:a!==null&&a>=0?`Edad: ${a} años${a<18?' · requiere tutor':''}`:''})}${chips('sexo','Sexo',['Mujer','Hombre'],{req:1})}${chips('civil','Estado civil',['Soltero/a','Casado/a','Unión libre','Viudo/a','Divorciado/a'],{full:1})}${chips('escolaridad','Escolaridad',['Ninguna','Primaria','Secundaria','Universitaria'],{full:1})}${inp('depend','No. de dependientes',{type:'number',mode:'numeric'})}</div>`;
-  if(s===1)body=`<div class="grid">${inp('aldea','Aldea / caserío / barrio',{req:1})}${inp('municipio','Municipio',{req:1})}<div class="f"><label class="t" for="i_depto">Departamento</label><select id="i_depto" data-k="depto">${DEPTOS.map(x=>`<option ${d.depto===x?'selected':''}>${x}</option>`).join('')}</select></div>${inp('ref','Punto de referencia de la vivienda',{full:1,ph:'Ej. frente a la escuela'})}${inp('cel','Celular',{req:1,mono:1,mode:'tel',ph:'9876-5432',max:9})}<div class="f"><span class="t">WhatsApp</span><div class="chips"><label><input type="checkbox" id="c_wa" data-k="wa" ${d.wa?'checked':''}> El celular tiene WhatsApp</label></div></div>${inp('cel2','Teléfono alterno (familiar)',{mono:1,mode:'tel'})}${inp('email','Correo (opcional)',{type:'email'})}${chips('vivienda','Vivienda',['Propia','Alquilada','Familiar'],{full:1})}${chips('llenado','¿Dónde se llena esta solicitud?',['Vivienda del solicitante','Reunión de la caja','Otro lugar'],{req:1,full:1})}<div class="f full"><span class="t">Ubicación GPS de la vivienda${d.llenado==='Vivienda del solicitante'?' <i>*</i>':''}</span><div class="rowbtns" style="margin-top:0;justify-content:flex-start"><button id="gpsBtn" class="${d.lat==null?'btn-primary':''}">${d.lat==null?'Guardar ubicación':'Actualizar ubicación'}</button><span class="hint" id="gpsTxt">${d.lat!=null?`Guardada: ${Number(d.lat).toFixed(5)}, ${Number(d.lng).toFixed(5)} · precisión ${Math.round(d.gpsPrec||0)} m`:'Tóquelo estando en la casa del solicitante.'}</span></div>${err('gps')}</div></div>`;
-  if(s===2)body=`<div class="grid">${chips('actividad','Actividad principal',['Agricultura','Ganadería','Comercio','Empleado/a','Oficio','Ama de casa','Otro'],{req:1,full:1})}${inp('rubro','Rubro o producto',{ph:'Ej. café, granos, pulpería'})}${chips('fuente','Fuente de ingresos',['Actividad propia','Salario','Remesas','Otro'],{req:1,full:1})}${chips('ingreso','Ingreso mensual aproximado (L)',['Menos de 5,000','5,000–10,000','10,001–20,000','Más de 20,000'],{req:1,full:1})}${chips('pep','¿Es o fue funcionario público de alto nivel, o familiar cercano de uno?',['No','Sí'],{full:1})}${d.pep==='Sí'?inp('pepCargo','Cargo',{req:1}):''}${inp('negocio','Nombre del negocio o empleador',{ph:'Opcional'})}${inp('negocioDir','Dirección del negocio o trabajo',{ph:'Opcional'})}${conPareja(d)?`<div class="f full"><h3 style="margin-top:6px">Cónyuge o compañero/a</h3></div><div class="f"><label class="t" for="cy_n">Nombre completo <i>*</i></label><input id="cy_n" data-cy="n" value="${esc(d.conyuge.n)}"></div><div class="f"><label class="t" for="cy_dni">DNI</label><input id="cy_dni" class="mono" data-cy="dni" inputmode="numeric" maxlength="13" value="${esc(d.conyuge.dni)}"></div><div class="f"><label class="t" for="cy_tel">Teléfono</label><input id="cy_tel" class="mono" data-cy="tel" inputmode="tel" maxlength="9" value="${esc(d.conyuge.tel)}"></div><div class="f full">${err('conyuge')}</div>`:''}${chips('famDir','¿Es familiar de algún miembro de la Junta Directiva de la caja?',['No','Sí'],{full:1})}${d.famDir==='Sí'?inp('famDirDet','¿De quién y qué parentesco?',{req:1,full:1}):''}</div>`;
-  if(s===3)body=`<p class="hint" style="margin-top:0">Inscripción ${L(p.inscripcion)} · aportación a capital ${L(p.aportacion)} · ahorro mínimo ${L(p.ahorro_min)}</p><div class="grid">${inp('ahorroIni','Ahorro inicial (L)',{req:1,type:'number',mode:'decimal'})}${inp('ahorroMes','Ahorro comprometido por periodo (L)',{req:1,type:'number',mode:'decimal'})}${chips('frecuencia','Frecuencia de depósito',['Semanal','Quincenal','Mensual'],{full:1})}${chips('pago','Forma de pago del depósito inicial',['Efectivo en reunión','Depósito a cuenta de la caja'],{full:1})}${d.pago==='Depósito a cuenta de la caja'?inp('boleta','No. de boleta bancaria',{req:1,mono:1}):''}<div class="f full note">Total a entregar al ser aprobado: <b class="num">${L(Number(p.inscripcion)+Number(p.aportacion)+Number(d.ahorroIni||0))}</b> (inscripción + aportación + ahorro inicial). El promotor no recibe dinero.</div></div>`;
-  if(s===4){const t=d.benef.reduce((x,b)=>x+Number(b.pct||0),0);body=`<p class="hint" style="margin-top:0">Personas que reciben el ahorro en caso de fallecimiento del socio/a.</p>${d.benef.map((b,i)=>`<div class="benef"><div class="f"><label class="t" for="b_n_${i}">Nombre completo</label><input id="b_n_${i}" data-b="${i}" data-bk="n" value="${esc(b.n)}"></div><div class="f"><label class="t" for="b_dni_${i}">DNI</label><input id="b_dni_${i}" class="mono" data-b="${i}" data-bk="dni" inputmode="numeric" maxlength="13" value="${esc(b.dni)}"></div><div class="f"><label class="t" for="b_p_${i}">Parentesco</label><select id="b_p_${i}" data-b="${i}" data-bk="p"><option value=""></option>${['Esposo/a','Hijo/a','Madre','Padre','Hermano/a','Otro'].map(x=>`<option ${b.p===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="f"><label class="t" for="b_pct_${i}">%</label><input id="b_pct_${i}" type="number" inputmode="numeric" data-b="${i}" data-bk="pct" value="${esc(b.pct)}"></div><button class="rm" data-rmb="${i}" aria-label="Quitar beneficiario" ${d.benef.length<2?'disabled':''}>×</button></div>`).join('')}<div class="rowbtns" style="margin-top:12px"><button id="addB" ${d.benef.length>=4?'disabled':''}>Agregar beneficiario</button><span class="num" id="sumB" style="font-weight:600;color:${t===100?'var(--ok)':'var(--warn)'}">Total: ${t}%</span></div>${err('benef')}${a!==null&&a<18?`<h3 style="margin-top:20px">Padre, madre o tutor (socio menor de edad)</h3><div class="grid" style="margin-top:10px"><div class="f"><label class="t" for="t_n">Nombre</label><input id="t_n" data-t="n" value="${esc(d.tutor.n)}"></div><div class="f"><label class="t" for="t_dni">DNI</label><input id="t_dni" class="mono" data-t="dni" inputmode="numeric" maxlength="13" value="${esc(d.tutor.dni)}"></div><div class="f"><label class="t" for="t_p">Parentesco</label><input id="t_p" data-t="p" value="${esc(d.tutor.p)}"></div></div>${err('tutor')}`:''}<h3 style="margin-top:22px">Referencias personales</h3><p class="hint" style="margin:2px 0 10px">Dos personas que conozcan al solicitante y no vivan con él/ella.</p>${d.refs.map((r,i)=>`<div class="grid" style="margin-bottom:10px"><div class="f"><label class="t" for="r_n_${i}">Referencia ${i+1} · nombre <i>*</i></label><input id="r_n_${i}" data-r="${i}" data-rk="n" value="${esc(r.n)}"></div><div class="f"><label class="t" for="r_rel_${i}">Relación <i>*</i></label><select id="r_rel_${i}" data-r="${i}" data-rk="rel"><option value=""></option>${['Familiar','Vecino/a','Amigo/a','Compañero/a de trabajo','Otro'].map(x=>`<option ${r.rel===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="f"><label class="t" for="r_tel_${i}">Teléfono <i>*</i></label><input id="r_tel_${i}" class="mono" data-r="${i}" data-rk="tel" inputmode="tel" maxlength="9" placeholder="9876-5432" value="${esc(r.tel)}"></div></div>`).join('')}${err('refs')}`}
-  if(s===5)body=`<div class="grid"><div class="f full"><label class="t" for="f0">Foto del rostro del solicitante <i>*</i></label><div class="photo"><input id="f0" type="file" accept="image/*" capture="user" data-photo="selfie">${d.selfie?`<img src="${d.selfie}" alt="Rostro del solicitante">`:''}</div><span class="hint">Con buena luz y sin gorra ni lentes oscuros. La oficina la compara con la foto del documento.</span>${err('selfie')}</div><div class="f"><label class="t" for="f1">Foto del documento · frente <i>*</i></label><div class="photo"><input id="f1" type="file" accept="image/*" capture="environment" data-photo="fotoDni1">${d.fotoDni1?`<img src="${d.fotoDni1}" alt="Frente del DNI">`:''}</div>${err('fotoDni1')}</div><div class="f"><label class="t" for="f2">Foto del documento · reverso</label><div class="photo"><input id="f2" type="file" accept="image/*" capture="environment" data-photo="fotoDni2">${d.fotoDni2?`<img src="${d.fotoDni2}" alt="Reverso del DNI">`:''}</div></div><div class="f full"><span class="t">Firma o huella del solicitante <i>*</i></span><canvas class="sig" id="sig" aria-label="Área de firma"></canvas><div class="rowbtns" style="margin-top:6px"><span class="hint" id="sigHint">${d.firma?'Firma guardada.':'Firme con el dedo dentro del recuadro.'}</span><button id="clrSig" class="btn-sm">Borrar firma</button></div>${err('firma')}</div><label class="check f full" for="c_ruego"><input type="checkbox" id="c_ruego" data-k="aRuego" ${d.aRuego?'checked':''}><span>El solicitante <b>no sabe firmar</b> y pone su huella. Firma un testigo a su ruego.</span></label>${d.aRuego?`<div class="f"><label class="t" for="tg_n">Nombre del testigo <i>*</i></label><input id="tg_n" data-tg="n" value="${esc(d.testigo.n)}"></div><div class="f"><label class="t" for="tg_dni">DNI del testigo <i>*</i></label><input id="tg_dni" class="mono" data-tg="dni" inputmode="numeric" maxlength="13" value="${esc(d.testigo.dni)}"></div>${err('testigo')?`<div class="f full">${err('testigo')}</div>`:''}<div class="f full"><span class="t">Firma del testigo <i>*</i></span><canvas class="sig" id="sig2" aria-label="Firma del testigo"></canvas><div class="rowbtns" style="margin-top:6px"><span class="hint" id="sig2Hint">${d.firmaTestigo?'Firma guardada.':'El testigo firma dentro del recuadro.'}</span><button id="clrSig2" class="btn-sm">Borrar firma</button></div>${err('firmaTestigo')}</div>`:''}</div>`;
-  if(s===6)body=`${DECL.map((t,i)=>`<label class="check" for="dc${i}"><input type="checkbox" id="dc${i}" data-decl="${i}" ${d.decl[i]?'checked':''}><span>${t}</span></label>`).join('')}${err('decl')}<h3 style="margin-top:18px">Autorización de uso de datos</h3><p class="hint">CACIH guarda estos datos solo para administrar la cuenta de ahorro, los créditos y enviar avisos. No los vende ni los comparte, salvo obligación legal o con el banco donde la caja tiene su cuenta. El socio puede pedir verlos, corregirlos o retirarlos.</p><label class="check" for="cs"><input type="checkbox" id="cs" data-k="consent" ${d.consent?'checked':''}><span><b>Acepto</b> el uso de mis datos en estos términos.</span></label><label class="check" for="cw"><input type="checkbox" id="cw" data-k="waAvisos" ${d.waAvisos?'checked':''}><span>Acepto recibir avisos por WhatsApp.</span></label>${err('consent')}`;
-  if(s===7){const bad=firstInvalid();body=`${bad>=0?`<div class="warnnote">Falta completar el paso ${STEPS[bad].k} · ${STEPS[bad].t}. <button id="goBad" class="btn-sm" style="margin-left:8px">Ir</button></div>`:''}<table class="plain" style="margin-top:10px">${[['Solicitante',d.nombres+' '+d.apellidos],[d.tipoDoc,fmtDni(d.dni)+(d.docVence?' · vence '+d.docVence.split('-').reverse().join('/'):'')],['Nacionalidad',d.nacionalidad],['Edad',a!==null?a+' años':''],['Domicilio',[d.aldea,d.municipio,d.depto].filter(Boolean).join(', ')],['Celular',d.cel],['Actividad',d.actividad+(d.rubro?' · '+d.rubro:'')],['Ahorro inicial / periodo',L(d.ahorroIni)+' / '+L(d.ahorroMes)+' '+(d.frecuencia||'').toLowerCase()],['Ubicación',d.lat!=null?'GPS guardado ('+Math.round(d.gpsPrec||0)+' m)':(d.llenado||'')],['Beneficiarios',d.benef.map(b=>b.n+' ('+b.pct+'%)').join(', ')],['Referencias',d.refs.map(r=>r.n).filter(Boolean).join(', ')],['Documentos',[d.selfie&&'foto del rostro',d.fotoDni1&&'documento frente',d.fotoDni2&&'documento reverso',d.firma&&(d.aRuego?'huella':'firma'),d.aRuego&&d.firmaTestigo&&'firma del testigo'].filter(Boolean).join(', ')]].map(r=>`<tr><td style="color:var(--muted);width:38%">${r[0]}</td><td>${esc(r[1])}</td></tr>`).join('')}</table><p class="hint">Registra: ${esc(S.perfil.nombre||S.session.user.email)}${navigator.onLine?'':' · sin señal: se guardará y enviará después'}</p>`}
+  if(s===0)body=`<div class="grid">${chips('tipoCuenta','Ficha de registro de ingreso',['Socio','Ahorro con propósito'],{req:1,full:1})}${chips('tipoSolicitud','Tipo de solicitud',['Nueva','Actualización'],{req:1,full:1})}${d.tipoSolicitud==='Actualización'?inp('codigoAnterior','Cliente Nº actual',{mono:1,ph:'Si lo conoce',hint:'Para actualizar los datos de un socio que ya existe.'}):''}
+  <div class="f full"><h3>1. Datos generales del cliente</h3></div>
+  ${inp('n1','1er nombre',{req:1})}${inp('n2','2do nombre')}${inp('a1','1er apellido',{req:1})}${inp('a2','2do apellido')}${inp('conocido','Conocido como',{ph:'Opcional'})}
+  ${chips('tipoDoc','Tipo de identificación',['DNI','Carné de residente','Pasaporte'],{req:1,full:1})}${d.tipoDoc==='DNI'?inp('dni','Nº de identificación',{req:1,mono:1,mode:'numeric',max:13,ph:'0000000000000',hint:'13 dígitos, sin guiones'}):inp('dni','Nº de '+d.tipoDoc.toLowerCase(),{req:1,mono:1,max:20,hint:'Como aparece en el documento'})}${inp('paisEmisor','País emisor',{req:1})}${inp('docVence','Vencimiento del documento',{req:1,type:'date'})}
+  ${inp('lugarNac','Lugar de nacimiento',{req:1,ph:'Municipio y departamento, o país'})}${inp('nac','Fecha de nacimiento',{req:1,type:'date',hint:a!==null&&a>=0?`Edad: ${a} años${a<18?' · requiere tutor':''}`:''})}${inp('nacionalidad','Nacionalidad',{req:1})}${inp('paisRes','País de residencia',{req:1})}
+  ${chips('sexo','Sexo',['Mujer','Hombre'],{req:1})}${chips('civil','Estado civil',['Soltero/a','Casado/a','Unión libre','Viudo/a','Divorciado/a'],{full:1})}${chips('escolaridad','Nivel de escolaridad',['Ninguno','Primario','Secundario','Universitario','Postgrado'],{full:1})}${inp('depend','No. de dependientes',{type:'number',mode:'numeric'})}
+  ${chips('otraNac','¿Tiene usted otra(s) nacionalidad(es) o es residente legal de otro(s) país(es)?',['Sí','No'],{req:1,full:1})}${d.otraNac==='Sí'?d.otrosPaises.map((x,i)=>inpA('otrosPaises',i,'pais','País '+(i+1),{req:i===0})+selA('otrosPaises',i,'tipo','Nacionalidad o residencia',['Nacionalidad','Residencia'],{req:i===0})).join('')+`<div class="f full">${err('otrosPaises')}</div>`:''}
+  ${chips('eeuu','¿Posee usted nacionalidad o residencia permanente de los EE. UU.?',['Sí','No'],{req:1,full:1})}</div>`;
+  if(s===1)body=`<div class="grid">${inp('direccion','Dirección',{req:1,full:1,ph:'Barrio o colonia, calle, punto de referencia, color de casa'})}${inp('aldea','Aldea o caserío',{req:1})}${inp('municipio','Municipio',{req:1})}<div class="f"><label class="t" for="i_depto">Departamento</label><select id="i_depto" data-k="depto">${DEPTOS.map(x=>`<option ${d.depto===x?'selected':''}>${x}</option>`).join('')}</select></div>${inp('pais','País')}
+  ${inp('telFijo','Teléfono fijo',{mono:1,mode:'tel',max:9})}${inp('cel','Celular 1',{req:1,mono:1,mode:'tel',ph:'9876-5432',max:9})}<div class="f"><span class="t">WhatsApp</span><div class="chips"><label><input type="checkbox" id="c_wa" data-k="wa" ${d.wa?'checked':''}> El celular 1 tiene WhatsApp</label></div></div>${inp('cel2','Celular 2',{mono:1,mode:'tel',max:9})}${inp('email','E-mail',{type:'email',ph:'Opcional'})}
+  ${chips('vivienda','La vivienda donde vive es',['Propia','Alquila','De familiares'],{req:1,full:1})}${inp('tiempoRes','Tiempo de residir en el mismo lugar',{ph:'Ej. 5 años'})}
+  ${chips('llenado','¿Dónde se llena esta solicitud?',['Vivienda del solicitante','Reunión de la caja','Otro lugar'],{req:1,full:1})}<div class="f full"><span class="t">Ubicación GPS de la vivienda${d.llenado==='Vivienda del solicitante'?' <i>*</i>':''}</span><div class="rowbtns" style="margin-top:0;justify-content:flex-start"><button id="gpsBtn" class="${d.lat==null?'btn-primary':''}">${d.lat==null?'Guardar ubicación':'Actualizar ubicación'}</button><span class="hint" id="gpsTxt">${d.lat!=null?`Guardada: ${Number(d.lat).toFixed(5)}, ${Number(d.lng).toFixed(5)} · precisión ${Math.round(d.gpsPrec||0)} m`:'Tóquelo estando en la casa del solicitante.'}</span></div>${err('gps')}</div></div>`;
+  if(s===2)body=`<div class="grid">${inp('profesion','Profesión',{ph:'Opcional'})}${inp('oficio','Oficio',{ph:'Opcional'})}${chips('ocupacion','Ocupación',['Comerciante individual','Empleado privado','Empleado público','Jubilado','Ama de casa','Estudiante','Otro'],{req:1,full:1})}${d.ocupacion==='Otro'?inp('ocupacionOtra','¿Cuál?',{req:1}):''}
+  ${esComerciante(d)?`<div class="f full"><h3>Si es comerciante individual</h3></div>${chips('actividadCom','Actividad principal a la que se dedica',['Agricultura','Ganadería','Construcción','Venta de alimentos y bebidas','Transporte','Comercio en general','Actividades inmobiliarias','Otra'],{req:1,full:1})}${d.actividadCom==='Otra'?inp('actividadOtra','Detalle la actividad',{req:1}):''}${chips('puntoFijo','¿La actividad la desarrolla en un punto fijo?',['Sí','No'],{req:1,full:1})}${d.puntoFijo==='Sí'?chips('local','El punto donde opera el negocio es',['Propio','Alquilado','De familiares'],{req:1,full:1}):''}${inp('negocio','Nombre del negocio',{req:1})}${inp('negocioDir','Ubicación del negocio',{req:1,full:1})}${inp('negTel','Nº de teléfono',{mono:1,mode:'tel',max:9})}${inp('negCel','Celular',{mono:1,mode:'tel',max:9})}${inp('negEmail','E-mail',{type:'email'})}`:''}
+  ${esEmpleado(d)?`<div class="f full"><h3>Si es empleado</h3></div>${inpO('empleo','empresa','Nombre de la empresa',{req:1})}${selO('empleo','tipo','Tipo de empresa',['Sector privado','Sector público','Mixta'],{req:1})}${inpO('empleo','antiguedad','Antigüedad laboral',{req:1,ph:'Ej. 3 años'})}${inpO('empleo','cargo','Cargo que ocupa',{req:1})}${inpO('empleo','actividad','Actividad principal de la empresa')}${inpO('empleo','direccion','Dirección de la empresa',{full:1})}${inpO('empleo','telefonos','Teléfonos')}<div class="f full">${err('empleo')}</div>`:''}</div>`;
+  if(s===3)body=`<div class="grid">${inp('fuentes','Principal(es) fuente(s) de ingreso',{req:1,full:1,ph:'Ej. venta de granos, salario, pensión'})}${chips('ingreso','Ingreso mensual aproximado (L)',['Menos de 5,000','5,000–10,000','10,001–20,000','Más de 20,000'],{req:1,full:1})}${chips('remesas','¿Recibe remesas familiares?',['Sí','No'],{req:1,full:1})}${d.remesas==='Sí'?inp('remMonto','Monto promedio (L)',{req:1,type:'number',mode:'decimal'})+chips('remFrec','Frecuencia',['Mensual','Bimestral','Trimestral','Ocasional'],{req:1}):''}
+  <div class="f full"><h3 style="margin-top:8px">Ahorro en la caja</h3><span class="hint">Inscripción ${L(p.inscripcion)} · aportación a capital ${L(p.aportacion)} · ahorro mínimo ${L(p.ahorro_min)}</span></div>
+  ${inp('ahorroIni','Ahorro inicial (L)',{req:1,type:'number',mode:'decimal'})}${inp('ahorroMes','Ahorro comprometido por periodo (L)',{req:1,type:'number',mode:'decimal'})}${chips('frecuencia','Frecuencia de depósito',['Semanal','Quincenal','Mensual'],{full:1})}${chips('pago','Forma de pago del depósito inicial',['Efectivo en reunión','Depósito a cuenta de la caja'],{full:1})}${d.pago==='Depósito a cuenta de la caja'?inp('boleta','No. de boleta bancaria',{req:1,mono:1}):''}<div class="f full note">Total a entregar al ser aprobado: <b class="num">${L(Number(p.inscripcion)+Number(p.aportacion)+Number(d.ahorroIni||0))}</b>. El promotor no recibe dinero.</div></div>`;
+  if(s===4)body=`<div class="grid"><div class="f full"><h3>5. Participación en la administración pública (PEP)</h3></div>${chips('pep','¿Desempeña o ha desempeñado un cargo en la administración pública en los últimos 4 años?',['Sí','No'],{req:1,full:1})}${d.pep==='Sí'?d.peps.map((r,i)=>inpA('peps',i,'institucion',`Institución pública ${i+1}`,{req:i===0})+inpA('peps',i,'cargo','Cargo desempeñado',{req:i===0})+inpA('peps',i,'periodo','Período de trabajo',{req:i===0,ph:'Ej. 2022–2024'})).join('')+`<div class="f full">${err('peps')}</div>`:''}
+  <div class="f full"><h3 style="margin-top:8px">6. Vinculaciones que pueden generar conflicto de interés</h3></div>${chips('vinculo','¿Posee algún vínculo familiar o está relacionado por afinidad o consanguinidad con algún miembro del consejo o empleado de CACIH?',['Sí','No'],{req:1,full:1})}${d.vinculo==='Sí'?d.vinculos.map((r,i)=>inpA('vinculos',i,'nombre',`Miembro de CACIH ${i+1}`,{req:i===0})+inpA('vinculos',i,'cargo','Cargo desempeñado',{req:i===0})+inpA('vinculos',i,'parentesco','Parentesco',{req:i===0})).join('')+`<div class="f full">${err('vinculos')}</div>`:''}</div>`;
+  if(s===5)body=`<div class="grid"><div class="f full"><h3>8. Referencias</h3><span class="hint">Personas que conozcan al solicitante y no vivan con él/ella.</span></div>${inpO('refFam','n','Familiar · nombre',{req:1})}${inpO('refFam','p','Parentesco',{req:1})}${inpO('refFam','tel','Tel/celular',{req:1,mono:1,mode:'tel',max:9,ph:'9876-5432'})}<div class="f full">${err('refFam')}</div>${inpO('refPer','n','Personal · nombre',{req:1})}${inpO('refPer','p','Parentesco o relación',{req:1})}${inpO('refPer','tel','Tel/celular',{req:1,mono:1,mode:'tel',max:9,ph:'9876-5432'})}<div class="f full">${err('refPer')}</div>${inp('refBanco','Bancaria',{full:1,ph:'Banco o cooperativa donde tiene cuenta (opcional)'})}${conPareja(d)?`<div class="f full"><h3 style="margin-top:6px">Cónyuge o compañero/a</h3></div><div class="f"><label class="t" for="cy_n">Nombre completo <i>*</i></label><input id="cy_n" data-cy="n" value="${esc(d.conyuge.n)}"></div><div class="f"><label class="t" for="cy_dni">DNI</label><input id="cy_dni" class="mono" data-cy="dni" inputmode="numeric" maxlength="13" value="${esc(d.conyuge.dni)}"></div><div class="f"><label class="t" for="cy_tel">Teléfono</label><input id="cy_tel" class="mono" data-cy="tel" inputmode="tel" maxlength="9" value="${esc(d.conyuge.tel)}"></div><div class="f full">${err('conyuge')}</div>`:''}</div>`;
+  if(s===6){const t=d.benef.reduce((x,b)=>x+Number(b.pct||0),0);body=`<p class="legal">${TXT.benef}</p>${d.benef.map((b,i)=>`<div class="benef"><div class="f"><label class="t" for="b_n_${i}">Nombre completo</label><input id="b_n_${i}" data-b="${i}" data-bk="n" value="${esc(b.n)}"></div><div class="f"><label class="t" for="b_dni_${i}">DNI</label><input id="b_dni_${i}" class="mono" data-b="${i}" data-bk="dni" inputmode="numeric" maxlength="13" value="${esc(b.dni)}"></div><div class="f"><label class="t" for="b_p_${i}">Parentesco</label><select id="b_p_${i}" data-b="${i}" data-bk="p"><option value=""></option>${['Esposo/a','Hijo/a','Madre','Padre','Hermano/a','Otro'].map(x=>`<option ${b.p===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="f"><label class="t" for="b_pct_${i}">%</label><input id="b_pct_${i}" type="number" inputmode="numeric" data-b="${i}" data-bk="pct" value="${esc(b.pct)}"></div><button class="rm" data-rmb="${i}" aria-label="Quitar beneficiario" ${d.benef.length<2?'disabled':''}>×</button></div>`).join('')}<div class="rowbtns" style="margin-top:12px"><button id="addB" ${d.benef.length>=4?'disabled':''}>Agregar beneficiario</button><span class="num" id="sumB" style="font-weight:600;color:${t===100?'var(--ok)':'var(--warn)'}">Total: ${t}%</span></div>${err('benef')}${a!==null&&a<18?`<h3 style="margin-top:20px">Padre, madre o tutor (socio menor de edad)</h3><div class="grid" style="margin-top:10px"><div class="f"><label class="t" for="t_n">Nombre</label><input id="t_n" data-t="n" value="${esc(d.tutor.n)}"></div><div class="f"><label class="t" for="t_dni">DNI</label><input id="t_dni" class="mono" data-t="dni" inputmode="numeric" maxlength="13" value="${esc(d.tutor.dni)}"></div><div class="f"><label class="t" for="t_p">Parentesco</label><input id="t_p" data-t="p" value="${esc(d.tutor.p)}"></div></div>${err('tutor')}`:''}`}
+  if(s===7)body=`<div class="grid"><div class="f full"><label class="t" for="f0">Foto del rostro del solicitante <i>*</i></label><div class="photo"><input id="f0" type="file" accept="image/*" capture="user" data-photo="selfie">${d.selfie?`<img src="${d.selfie}" alt="Rostro del solicitante">`:''}</div><span class="hint">Con buena luz y sin gorra ni lentes oscuros. La oficina la compara con la foto del documento.</span>${err('selfie')}</div><div class="f"><label class="t" for="f1">Foto del documento · frente <i>*</i></label><div class="photo"><input id="f1" type="file" accept="image/*" capture="environment" data-photo="fotoDni1">${d.fotoDni1?`<img src="${d.fotoDni1}" alt="Frente del DNI">`:''}</div>${err('fotoDni1')}</div><div class="f"><label class="t" for="f2">Foto del documento · reverso</label><div class="photo"><input id="f2" type="file" accept="image/*" capture="environment" data-photo="fotoDni2">${d.fotoDni2?`<img src="${d.fotoDni2}" alt="Reverso del DNI">`:''}</div></div><div class="f full"><span class="t">Firma o huella del solicitante <i>*</i></span><canvas class="sig" id="sig" aria-label="Área de firma"></canvas><div class="rowbtns" style="margin-top:6px"><span class="hint" id="sigHint">${d.firma?'Firma guardada.':'Firme con el dedo dentro del recuadro.'}</span><button id="clrSig" class="btn-sm">Borrar firma</button></div>${err('firma')}</div><label class="check f full" for="c_ruego"><input type="checkbox" id="c_ruego" data-k="aRuego" ${d.aRuego?'checked':''}><span>El solicitante <b>no sabe firmar</b> y pone su huella. Firma un testigo a su ruego.</span></label>${d.aRuego?`<div class="f"><label class="t" for="tg_n">Nombre del testigo <i>*</i></label><input id="tg_n" data-tg="n" value="${esc(d.testigo.n)}"></div><div class="f"><label class="t" for="tg_dni">DNI del testigo <i>*</i></label><input id="tg_dni" class="mono" data-tg="dni" inputmode="numeric" maxlength="13" value="${esc(d.testigo.dni)}"></div>${err('testigo')?`<div class="f full">${err('testigo')}</div>`:''}<div class="f full"><span class="t">Firma del testigo <i>*</i></span><canvas class="sig" id="sig2" aria-label="Firma del testigo"></canvas><div class="rowbtns" style="margin-top:6px"><span class="hint" id="sig2Hint">${d.firmaTestigo?'Firma guardada.':'El testigo firma dentro del recuadro.'}</span><button id="clrSig2" class="btn-sm">Borrar firma</button></div>${err('firmaTestigo')}</div>`:''}</div>`;
+  if(s===8)body=`<p class="hint" style="margin-top:0">Lea al solicitante cada texto antes de marcarlo.</p><h3>7. Autorización para el envío de notificaciones, correspondencia u otra documentación</h3><p class="legal">${TXT.notif}</p>${chips('notif','¿Autoriza?',['Sí','No'],{req:1})}
+  <h3 style="margin-top:18px">Declaraciones</h3>${declTextos().map((x,i)=>`<label class="check" for="dc${i}"><input type="checkbox" id="dc${i}" data-decl="${i}" ${d.decl[i]?'checked':''}><span><b>${x.t}.</b> ${x.x}</span></label>`).join('')}${err('decl')}
+  <h3 style="margin-top:18px">Autorización de uso de datos</h3><p class="hint">CACIH guarda estos datos solo para administrar la cuenta y enviar avisos. No los vende ni los comparte, salvo obligación legal o con el banco donde la caja tiene su cuenta. El socio puede pedir verlos, corregirlos o retirarlos.</p><label class="check" for="cs"><input type="checkbox" id="cs" data-k="consent" ${d.consent?'checked':''}><span><b>Acepto</b> el uso de mis datos en estos términos.</span></label><label class="check" for="cw"><input type="checkbox" id="cw" data-k="waAvisos" ${d.waAvisos?'checked':''}><span>Acepto recibir avisos por WhatsApp.</span></label>${err('consent')}`;
+  if(s===9){const bad=firstInvalid();body=`${bad>=0?`<div class="warnnote">Falta completar el paso ${STEPS[bad].k} · ${STEPS[bad].t}. <button id="goBad" class="btn-sm" style="margin-left:8px">Ir</button></div>`:''}<table class="plain" style="margin-top:10px">${[['Ficha',d.tipoCuenta+' · '+d.tipoSolicitud+(d.codigoAnterior&&d.tipoSolicitud==='Actualización'?' · cliente '+d.codigoAnterior:'')],['Solicitante',nombreCompleto(d)+(d.conocido?' ('+d.conocido+')':'')],[d.tipoDoc,fmtDni(d.dni)+(d.docVence?' · vence '+d.docVence.split('-').reverse().join('/'):'')],['Nacionalidad',d.nacionalidad+(d.otraNac==='Sí'?' · otras: '+d.otrosPaises.map(x=>x.pais).filter(Boolean).join(', '):'')+(d.eeuu==='Sí'?' · EE. UU.':'')],['Edad',a!==null?a+' años':''],['Dirección',[d.direccion,d.aldea,d.municipio,d.depto].filter(Boolean).join(', ')],['Celular',d.cel],['Ocupación',ocupTxt(d)+(esComerciante(d)?' · '+actComTxt(d)+' · '+d.negocio:'')+(esEmpleado(d)?' · '+d.empleo.cargo+', '+d.empleo.empresa:'')],['Remesas',d.remesas==='Sí'?L(d.remMonto)+' '+(d.remFrec||'').toLowerCase():d.remesas],['PEP / vínculo con CACIH',(d.pep||'—')+' / '+(d.vinculo||'—')],['Ahorro inicial / periodo',L(d.ahorroIni)+' / '+L(d.ahorroMes)+' '+(d.frecuencia||'').toLowerCase()],['Beneficiarios',d.benef.map(b=>b.n+' ('+b.pct+'%)').join(', ')],['Referencias',[d.refFam.n,d.refPer.n].filter(Boolean).join(', ')],['Documentos',[d.selfie&&'foto del rostro',d.fotoDni1&&'documento frente',d.fotoDni2&&'documento reverso',d.firma&&(d.aRuego?'huella':'firma'),d.aRuego&&d.firmaTestigo&&'firma del testigo'].filter(Boolean).join(', ')]].map(r=>`<tr><td style="color:var(--muted);width:38%">${r[0]}</td><td>${esc(r[1])}</td></tr>`).join('')}</table><p class="hint">Registra: ${esc(S.perfil.nombre||S.session.user.email)}${navigator.onLine?'':' · sin señal: se guardará y enviará después'}</p>`}
   return `<h1>Nueva solicitud de afiliación</h1><p class="lead">Llenar junto al solicitante, en su casa o en la reunión. El borrador se guarda solo.</p>
   <div class="steps">${STEPS.map((x,i)=>`<button data-go="${i}" class="${i===s?'cur':''} ${i<s?'done':''}"><span class="l">${x.k}</span>${x.t}</button>`).join('')}</div>
-  <div class="card"><h2 style="margin-bottom:14px">${STEPS[s].k}. ${STEPS[s].t}</h2>${body}
-  <div class="rowbtns"><button id="prev" ${s===0?'disabled':''}>Atrás</button>${s<7?`<button class="btn-primary" id="next">Siguiente</button>`:`<button class="btn-primary" id="send" ${firstInvalid()>=0?'disabled':''}>${navigator.onLine?'Enviar a la oficina':'Guardar para enviar'}</button>`}</div></div>
+  <div class="card"><h2 style="margin-bottom:14px"><span class="hint" style="font-family:var(--f-body);font-weight:600">Paso ${s+1} de ${STEPS.length} · </span>${STEPS[s].t}</h2>${body}
+  <div class="rowbtns"><button id="prev" ${s===0?'disabled':''}>Atrás</button>${s<LAST?`<button class="btn-primary" id="next">Siguiente</button>`:`<button class="btn-primary" id="send" ${firstInvalid()>=0?'disabled':''}>${navigator.onLine?'Enviar a la oficina':'Guardar para enviar'}</button>`}</div></div>
   <p style="margin-top:14px"><button id="resetDraft" class="btn-bad btn-sm">Descartar borrador</button></p>`;
 }
 
@@ -353,31 +461,64 @@ function vBandeja(){
   <div class="filters">${['Pendiente','Aprobada','Rechazada','Todas'].map(f=>`<button data-f="${f}" class="${S.filter===f?'on':''}">${f==='Todas'?'Todas':f+'s'}</button>`).join('')}</div>
   <div class="toolbar"><span class="hint">${S.bandeja.length} ${S.bandeja.length===1?'solicitud':'solicitudes'} en esta vista</span>${puedeExportar()?`<div class="grp"><button class="btn-sm" id="xlsBtn">Exportar Excel</button><button class="btn-sm" id="pdfListBtn">Exportar PDF</button></div>`:'<span class="hint">Exportar listados: solo el administrador</span>'}</div>
   <form id="searchF" style="display:flex;gap:8px;margin-bottom:12px"><label for="qBox" class="t" hidden>Buscar</label><input id="qBox" placeholder="Buscar por nombre, DNI o código" value="${esc(S.q)}"><button type="submit">Buscar</button></form>
-  <div class="list">${S.bandeja.length?S.bandeja.map(s=>`<button class="item" data-open="${s.id}"><b>${esc(s.nombres+' '+s.apellidos)}</b>${pill(s.estado)}<span class="meta"><span class="mono">${esc(s.codigo_socio||s.folio)}</span> · DNI ${esc(fmtDni(s.dni))} · ${esc(s.aldea)}, ${esc(s.municipio)} · ${esc(s.promotor_nombre)} · ${fecha(s.creado_en)}</span><span class="meta num">${L(s.ahorro_inicial)}</span></button>`).join(''):`<div class="card empty">No hay solicitudes ${S.filter==='Todas'?'':S.filter.toLowerCase()+'s'} ${S.q?'que coincidan con la búsqueda':''}.</div>`}</div>`;
+  <div class="list">${S.bandeja.length?S.bandeja.map(s=>`<button class="item" data-open="${s.id}"><b>${esc(s.nombres+' '+s.apellidos)}${s.tipo_solicitud==='Actualización'?' <span class="pill p-q">Actualización</span>':''}${s.tipo_cuenta==='Ahorro con propósito'?' <span class="pill p-q">Ahorro con propósito</span>':''}</b>${pill(s.estado)}<span class="meta"><span class="mono">${esc(s.codigo_socio||s.folio)}</span> · DNI ${esc(fmtDni(s.dni))} · ${esc(s.aldea)}, ${esc(s.municipio)} · ${esc(s.promotor_nombre)} · ${fecha(s.creado_en)}</span><span class="meta num">${L(s.ahorro_inicial)}</span></button>`).join(''):`<div class="card empty">No hay solicitudes ${S.filter==='Todas'?'':S.filter.toLowerCase()+'s'} ${S.q?'que coincidan con la búsqueda':''}.</div>`}</div>`;
 }
 
 function fichaHTML(s,urls){
-  const p=S.params,a=edad(s.fecha_nacimiento),row=(k,v)=>`<tr><td class="k">${k}</td><td>${esc(v)}</td></tr>`;
-  const ben=Array.isArray(s.beneficiarios)?s.beneficiarios:[];
-  return `<div class="sheet"><div class="hd"><div class="nm"><svg width="40" height="40" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="31" fill="#b48a2c"/><circle cx="32" cy="32" r="26" fill="#173f2c"/><path d="M18 44 L28 32 L35 38 L46 22" fill="none" stroke="#f3e2b3" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 22 H46 V28" fill="none" stroke="#f3e2b3" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><div><b>${esc(p.nombre)}</b><em>${esc(p.lema)}</em><div>Ficha de Afiliación de Socio/a Ahorrante${p.registro?' · Registro No. '+esc(p.registro):''}</div></div></div><div class="code">${esc(s.codigo_socio||'CR-____-____')}<br><small>Folio ${esc(s.folio)}</small></div></div>
-  <h4>A. Identificación</h4><table>${row('Nombres y apellidos',s.nombres+' '+s.apellidos)}${row(s.tipo_documento||'DNI',fmtDni(s.dni)+(s.documento_vencimiento?' · vence '+s.documento_vencimiento.split('-').reverse().join('/'):''))}${row('Nacionalidad / lugar de nacimiento',[s.nacionalidad,s.lugar_nacimiento].filter(Boolean).join(' · '))}${row('Fecha de nacimiento / edad',new Date(s.fecha_nacimiento+'T12:00').toLocaleDateString('es-HN')+(a!==null?' · '+a+' años':''))}${row('Sexo / estado civil',[s.sexo,s.estado_civil].filter(Boolean).join(' · '))}${row('Escolaridad / dependientes',[s.escolaridad,s.dependientes!=null?s.dependientes+' dependientes':''].filter(Boolean).join(' · '))}</table>
-  <h4>B. Domicilio y contacto</h4><table>${row('Domicilio',[s.aldea,s.municipio,s.departamento].filter(Boolean).join(', '))}${row('Referencia',s.referencia)}${row('Celular / alterno',s.celular+(s.whatsapp?' (WhatsApp)':'')+(s.telefono_alterno?' · '+s.telefono_alterno:''))}${row('Correo / vivienda',[s.email,s.vivienda].filter(Boolean).join(' · '))}${row('Lugar de llenado / GPS',[s.lugar_llenado,s.latitud!=null?Number(s.latitud).toFixed(6)+', '+Number(s.longitud).toFixed(6):''].filter(Boolean).join(' · '))}</table>
-  <h4>C. Actividad económica</h4><table>${row('Actividad / rubro',[s.actividad,s.rubro].filter(Boolean).join(' · '))}${row('Fuente / ingreso mensual',s.fuente_ingresos+' · L '+s.rango_ingreso)}${row('Negocio o empleador',[s.negocio_nombre,s.negocio_direccion].filter(Boolean).join(' · '))}${row('Persona expuesta políticamente',s.es_pep?'Sí · '+(s.pep_cargo||''):'No')}${row('Familiar de directivo',s.familiar_directivo?'Sí · '+(s.familiar_directivo_detalle||''):'No')}${s.conyuge?row('Cónyuge',s.conyuge.nombre+(s.conyuge.dni?' · DNI '+fmtDni(s.conyuge.dni):'')+(s.conyuge.telefono?' · '+s.conyuge.telefono:'')):''}</table>
-  <h4>D. Ahorro y aportaciones</h4><table>${row('Inscripción + aportación a capital',L(p.inscripcion)+' + '+L(p.aportacion))}${row('Ahorro inicial',L(s.ahorro_inicial))}${row('Ahorro comprometido',L(s.ahorro_periodo)+' · '+s.frecuencia)}${row('Forma de pago',s.forma_pago+(s.boleta?' · boleta '+s.boleta:''))}</table>
-  <h4>E. Beneficiarios</h4><table><tr><td class="k">Nombre</td><td class="k">DNI</td><td class="k">Parentesco</td><td class="k" style="width:50px">%</td></tr>${ben.map(b=>`<tr><td>${esc(b.nombre)}</td><td>${esc(fmtDni(b.dni))}</td><td>${esc(b.parentesco)}</td><td>${esc(b.porcentaje)}</td></tr>`).join('')}</table>
-  ${s.tutor?`<table style="margin-top:5px">${row('Tutor (socio menor de edad)',s.tutor.nombre+' · DNI '+fmtDni(s.tutor.dni)+' · '+(s.tutor.parentesco||''))}</table>`:''}
-  ${(s.referencias||[]).length?`<table style="margin-top:5px"><tr><td class="k">Referencia</td><td class="k">Relación</td><td class="k">Teléfono</td></tr>${s.referencias.map(r=>`<tr><td>${esc(r.nombre)}</td><td>${esc(r.relacion)}</td><td>${esc(r.telefono)}</td></tr>`).join('')}</table>`:''}
-  <h4>F–G. Declaraciones y autorización de datos</h4><p style="margin:3px 0">${s.declaraciones?'☑':'☐'} Origen lícito de fondos, aceptación de estatutos y reglamento, asistencia a asambleas, plazo de devolución de aportaciones. ${s.consentimiento_datos?'☑':'☐'} Autoriza el uso de sus datos. ${s.avisos_whatsapp?'☑':'☐'} Avisos por WhatsApp.</p>
-  <div class="sigs"><div>${s.firma&&urls[s.firma]?`<img src="${urls[s.firma]}" crossorigin="anonymous" alt="Firma del solicitante">`:''}<span>${s.firma_a_ruego?'Huella del socio/a':'Firma o huella del socio/a'}</span></div>${s.firma_a_ruego?`<div>${s.firma_testigo&&urls[s.firma_testigo]?`<img src="${urls[s.firma_testigo]}" crossorigin="anonymous" alt="Firma del testigo">`:''}<span>Testigo a ruego: ${esc(s.testigo?.nombre||'')} · DNI ${esc(fmtDni(s.testigo?.dni))}</span></div>`:''}<div><span>Secretario/a</span></div><div><span>Tesorero/a</span></div></div>
-  <h4>H. Uso exclusivo de la caja</h4><table>${row('Promotor / fecha de envío',s.promotor_nombre+' · '+fechaHora(s.creado_en))}${row('Estado',s.estado+(s.acta?' · acta No. '+s.acta:'')+(s.motivo_rechazo?' · '+s.motivo_rechazo:'')+(s.revisado_en?' · '+fecha(s.revisado_en):''))}${row('Copia de DNI',s.foto_dni_frente?'Foto recibida'+(s.foto_dni_reverso?' (frente y reverso)':' (frente)'):'No')}${row('Foto del solicitante',s.foto_solicitante?'Recibida':'No')}${row('Nivel de riesgo',s.es_pep?'Alto (PEP)':s.familiar_directivo?'Medio (familiar de directivo)':'Bajo')}</table>
-  <div class="foot"><span>FA-01 v1.3 · Original: archivo · Copia: socio/a</span><span>Impreso ${fechaHora(new Date())}</span></div></div>`;
+  const p=S.params,a=edad(s.fecha_nacimiento),v=x=>esc(x??''),yn=x=>x==null?'':(x?'Sí':'No'),ck=x=>x?'☒':'☐';
+  const r2=(k1,v1,k2,v2)=>`<tr><td class="k">${k1}</td><td>${v(v1)}</td><td class="k">${k2}</td><td>${v(v2)}</td></tr>`,r1=(k,x)=>`<tr><td class="k">${k}</td><td colspan="3">${v(x)}</td></tr>`;
+  const img=(path,alt)=>path&&urls[path]?`<img src="${urls[path]}" crossorigin="anonymous" alt="${alt}">`:'';
+  const ben=Array.isArray(s.beneficiarios)?s.beneficiarios:[],peps=s.pep_detalle||[],vins=s.vinculos||[],refs=s.referencias||[],emp=s.empleo,op=s.otros_paises||[];
+  const fNac=s.fecha_nacimiento?s.fecha_nacimiento.split('-').reverse().join('/'):'',vence=s.documento_vencimiento?s.documento_vencimiento.split('-').reverse().join('/'):'';
+  const tabla=(cols,rows)=>`<table class="grid3"><tr>${cols.map(c=>`<td class="k">${c}</td>`).join('')}</tr>${rows.length?rows.map(r=>`<tr>${r.map(c=>`<td>${v(c)}</td>`).join('')}</tr>`).join(''):`<tr>${cols.map(()=>'<td>&nbsp;</td>').join('')}</tr>`}</table>`;
+  const nombre=[s.primer_nombre||s.nombres,s.segundo_nombre,s.primer_apellido||s.apellidos,s.segundo_apellido].filter(Boolean).join(' ');
+  return `<div class="sheet">
+  <div class="hd2"><img class="logo" src="logo-cacih.png" alt="CACIH"><div class="ctr"><b>– CACIH –</b><div class="nl">${v(String(p.nombre_legal||'').toUpperCase())}</div><div>${v(p.direccion)} · Tel. ${v(p.telefonos)}</div><div>${v(p.correo)}</div></div><div class="foto">${img(s.foto_solicitante,'Foto del solicitante')||'Foto'}</div></div>
+  <div class="tit"><b>FICHA DE REGISTRO DE INGRESO</b><span>${ck(s.tipo_cuenta!=='Ahorro con propósito')} SOCIO</span><span>${ck(s.tipo_cuenta==='Ahorro con propósito')} AHORRO CON PROPÓSITO</span></div>
+  <div class="tit2"><span>FECHA DE REGISTRO: <b>${fecha(s.creado_en)}</b></span><span>TIPO DE SOLICITUD: ${ck(s.tipo_solicitud!=='Actualización')} NUEVO ${ck(s.tipo_solicitud==='Actualización')} ACTUALIZACIÓN</span><span>CLIENTE Nº <b class="mono">${v(s.codigo_socio||s.codigo_anterior||'________')}</b></span><span class="mono">Folio ${v(s.folio)}</span></div>
+  <h4>1. Datos generales del cliente</h4><table class="kv">
+  ${r2('1er nombre',s.primer_nombre||s.nombres,'2do nombre',s.segundo_nombre)}${r2('1er apellido',s.primer_apellido||s.apellidos,'2do apellido',s.segundo_apellido)}${r2('Conocido como',s.conocido_como,'Sexo',s.sexo)}
+  ${r2('Tipo de identificación',s.tipo_documento,'Nº de identificación',fmtDni(s.dni))}${r2('País emisor',s.pais_emisor,'Vencimiento',vence)}
+  ${r2('Lugar y fecha de nacimiento',[s.lugar_nacimiento,fNac+(a!==null?' ('+a+' años)':'')].filter(Boolean).join(' · '),'Nacionalidad',s.nacionalidad)}${r2('País de residencia',s.pais_residencia,'Estado civil',s.estado_civil)}${r2('Nivel de escolaridad',s.escolaridad,'Dependientes',s.dependientes)}
+  ${r2('¿Otra nacionalidad o residencia legal?',[yn(s.otra_nacionalidad),op.map(x=>`${x.pais} (${String(x.tipo||'').toLowerCase()})`).join(', ')].filter(Boolean).join(' · '),'¿Nacionalidad o residencia de EE. UU.?',yn(s.nacionalidad_eeuu))}</table>
+  <h4>2. Datos de localización del cliente</h4><table class="kv">
+  ${r1('Dirección',s.direccion||s.referencia)}${r2('Aldea o caserío',s.aldea,'Municipio',s.municipio)}${r2('Departamento',s.departamento,'País',s.pais)}
+  ${r2('Teléfono fijo',s.telefono_fijo,'Celular 1',s.celular+(s.whatsapp?' (WhatsApp)':''))}${r2('Celular 2',s.telefono_alterno,'E-mail',s.email)}${r2('La vivienda donde vive es',s.vivienda,'Tiempo de residir',s.tiempo_residencia)}
+  ${r2('Lugar de llenado',s.lugar_llenado,'Ubicación GPS',s.latitud!=null?Number(s.latitud).toFixed(6)+', '+Number(s.longitud).toFixed(6):'')}</table>
+  <h4>3. Datos de la actividad económica u ocupación</h4><table class="kv">
+  ${r2('Profesión',s.profesion,'Oficio',s.oficio)}${r1('Ocupación',s.ocupacion||[s.actividad,s.rubro].filter(Boolean).join(' · '))}
+  ${s.actividad_comercial||s.negocio_nombre?r2('Actividad principal',s.actividad_comercial,'Punto fijo',[yn(s.negocio_punto_fijo),s.negocio_local?'local '+String(s.negocio_local).toLowerCase():''].filter(Boolean).join(' · '))+r1('Nombre del negocio',s.negocio_nombre)+r1('Ubicación del negocio',s.negocio_direccion)+r2('Teléfono / celular',[s.negocio_telefono,s.negocio_celular].filter(Boolean).join(' / '),'E-mail',s.negocio_email):''}
+  ${emp?r1('Nombre de la empresa',emp.empresa)+r2('Tipo de empresa',emp.tipo,'Antigüedad laboral',emp.antiguedad)+r2('Cargo que ocupa',emp.cargo,'Actividad de la empresa',emp.actividad)+r2('Dirección de la empresa',emp.direccion,'Teléfonos',emp.telefonos):''}</table>
+  <h4>4. Información financiera del cliente</h4><table class="kv">
+  ${r1('Principal(es) fuente(s) de ingreso',s.fuente_ingresos)}${r2('Ingreso mensual aproximado',s.rango_ingreso?'L '+s.rango_ingreso:'','Recibe remesas familiares',yn(s.recibe_remesas))}${s.recibe_remesas?r2('Monto promedio',L(s.remesas_monto),'Frecuencia',s.remesas_frecuencia):''}</table>
+  <h4>5. Participación en la administración pública (PEP)</h4><p class="q">¿Desempeña o ha desempeñado un cargo en la administración pública en los últimos 4 años? <b>${yn(s.es_pep)}</b></p>
+  ${s.es_pep?tabla(['Nombre de la institución pública','Cargo desempeñado','Período de trabajo'],peps.length?peps.map(r=>[r.institucion,r.cargo,r.periodo]):[[s.pep_cargo,'','']]):''}
+  <h4>6. Información sobre vinculaciones que pueden generar conflicto de interés</h4><p class="q">¿Posee algún vínculo familiar o está relacionado por afinidad o consanguinidad con algún miembro del consejo o empleado de CACIH? <b>${yn(s.familiar_directivo)}</b></p>
+  ${s.familiar_directivo?tabla(['Nombre del miembro de CACIH','Cargo desempeñado','Parentesco'],vins.length?vins.map(r=>[r.nombre,r.cargo,r.parentesco]):[[s.familiar_directivo_detalle,'','']]):''}
+  <h4>7. Autorización para el envío de notificaciones, correspondencia u otra documentación</h4><p class="legal">${ck(s.autoriza_notificaciones===true)} SÍ ${ck(s.autoriza_notificaciones===false)} NO · ${TXT.notif}</p>
+  <h4>8. Referencias</h4>${tabla(['Tipo','Nombre','Parentesco','Tel/celular'],refs.map((r,i)=>[r.tipo||(i?'Personal':'Familiar'),r.nombre,r.relacion,r.telefono]))}<table class="kv">${r1('Bancaria',s.referencia_bancaria)}${s.conyuge?r1('Cónyuge',[s.conyuge.nombre,s.conyuge.dni?'DNI '+fmtDni(s.conyuge.dni):'',s.conyuge.telefono].filter(Boolean).join(' · ')):''}</table>
+  <h4>9. Declaraciones y designación de beneficiarios</h4><p class="legal">${TXT.vinc(p.nombre_legal)}</p><p class="legal">${TXT.benef}</p>
+  ${tabla(['Nombre completo','Identidad','Parentesco','%'],ben.map(b=>[b.nombre,fmtDni(b.dni),b.parentesco,b.porcentaje]))}
+  ${s.tutor?`<table class="kv">${r1('Tutor (socio menor de edad)',s.tutor.nombre+' · DNI '+fmtDni(s.tutor.dni)+' · '+(s.tutor.parentesco||''))}</table>`:''}
+  <h4>10. Actualización de la información</h4><p class="legal">${TXT.act}</p>
+  <h4>11. Certificación del cliente</h4><p class="legal">${TXT.cert}</p>
+  <div class="sigs"><div><b class="sn">${v(nombre)}</b><span>Nombre del solicitante</span></div><div>${img(s.firma,'Firma del solicitante')}<span>${s.firma_a_ruego?'Huella del solicitante':'Firma'}</span></div><div><b class="sn">${fecha(s.creado_en)}</b><span>Fecha</span></div></div>
+  ${s.firma_a_ruego?`<div class="sigs"><div></div><div>${img(s.firma_testigo,'Firma del testigo')}<span>Testigo a ruego: ${v(s.testigo?.nombre)} · DNI ${v(fmtDni(s.testigo?.dni))}</span></div><div></div></div>`:''}
+  <h4>Información complementaria de CACIH</h4><table class="kv">
+  ${r2('Inscripción + aportación',L(p.inscripcion)+' + '+L(p.aportacion),'Ahorro inicial',L(s.ahorro_inicial))}${r2('Ahorro comprometido',L(s.ahorro_periodo)+' · '+s.frecuencia,'Forma de pago',s.forma_pago+(s.boleta?' · boleta '+s.boleta:''))}
+  ${r2('Origen lícito de fondos y estatutos',s.declaraciones?'Declarado y aceptado':'No','Autoriza uso de datos',yn(s.consentimiento_datos)+(s.avisos_whatsapp?' · avisos por WhatsApp':''))}</table>
+  <h4>Uso exclusivo de la caja</h4><table class="kv">
+  ${r2('Promotor',s.promotor_nombre,'Fecha de envío',fechaHora(s.creado_en))}${r2('Estado',s.estado+(s.motivo_rechazo?' · '+s.motivo_rechazo:''),'Acta de aprobación',s.acta?'No. '+s.acta+(s.revisado_en?' · '+fecha(s.revisado_en):''):'')}
+  ${r2('Documento y foto',[s.foto_dni_frente?'documento'+(s.foto_dni_reverso?' (frente y reverso)':' (frente)'):'',s.foto_solicitante?'foto del rostro':''].filter(Boolean).join(' · ')||'No','Nivel de riesgo',s.es_pep||s.nacionalidad_eeuu?'Alto ('+[s.es_pep&&'PEP',s.nacionalidad_eeuu&&'EE. UU.'].filter(Boolean).join(', ')+')':s.familiar_directivo?'Medio (vínculo con CACIH)':'Bajo')}</table>
+  <div class="sigs"><div></div><div><span>Secretario/a</span></div><div><span>Tesorero/a</span></div></div>
+  <div class="foot"><span>FA-01 v1.4 · Original: archivo · Copia: socio/a</span><span>Impreso ${fechaHora(new Date())}</span></div></div>`;
 }
 function vDetalle(){
   if(!S.detail)return `<button id="back" class="btn-sm">← Volver</button><p class="empty"><span class="spin"></span> Cargando ficha…</p>`;
   const{s,urls,log}=S.detail;
   return `<button id="back" class="btn-sm">← Volver a la bandeja</button>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px"><h1>${esc(s.nombres+' '+s.apellidos)}</h1>${pill(s.estado)}</div>
-  ${s.estado==='Pendiente'?`<div class="card" style="margin-top:14px"><h3>Autorizar como socio/a ahorrante</h3><p class="hint" style="margin:4px 0 0">Verifique que la foto del DNI coincide con los datos antes de aprobar.</p><div class="actions"><div class="f" style="width:150px"><label class="t" for="acta">No. de acta</label><input id="acta" class="mono" placeholder="Ej. 15"></div><button class="btn-primary" id="approve">Aprobar y generar código</button></div><div class="actions"><div class="f" style="flex:1;min-width:200px"><label class="t" for="motivo">Motivo de rechazo</label><input id="motivo" placeholder="Ej. DNI ilegible, volver a visitar"></div><button class="btn-bad" id="reject">Rechazar</button></div><p class="err" id="apErr"></p></div>`:''}
+  ${s.estado==='Pendiente'?`<div class="card" style="margin-top:14px"><h3>${s.tipo_solicitud==='Actualización'?'Aprobar actualización de datos':'Autorizar como socio/a ahorrante'}</h3><p class="hint" style="margin:4px 0 0">Verifique que la foto del DNI coincide con los datos antes de aprobar.</p><div class="actions"><div class="f" style="width:150px"><label class="t" for="acta">No. de acta</label><input id="acta" class="mono" placeholder="Ej. 15"></div><button class="btn-primary" id="approve">Aprobar y generar código</button></div><div class="actions"><div class="f" style="flex:1;min-width:200px"><label class="t" for="motivo">Motivo de rechazo</label><input id="motivo" placeholder="Ej. DNI ilegible, volver a visitar"></div><button class="btn-bad" id="reject">Rechazar</button></div><p class="err" id="apErr"></p></div>`:''}
   <div class="card" style="margin-top:14px"><div class="rowbtns" style="margin-top:0"><h3>Documentos</h3><div class="grp" style="display:flex;gap:8px;flex-wrap:wrap"><button id="pdfFichaBtn">Descargar PDF</button><button class="btn-primary" id="printBtn">Imprimir ficha</button></div></div>
   <div class="docs">${[['foto_solicitante','Rostro del solicitante'],['foto_dni_frente','Documento · frente'],['foto_dni_reverso','Documento · reverso'],['firma',s.firma_a_ruego?'Huella':'Firma'],['firma_testigo','Firma del testigo']].map(([k,t])=>s[k]&&urls[s[k]]?`<figure><a href="${urls[s[k]]}" target="_blank" rel="noopener"><img src="${urls[s[k]]}" crossorigin="anonymous" alt="${t}"></a><figcaption>${t}</figcaption></figure>`:'').join('')||'<span class="hint">Sin documentos adjuntos.</span>'}</div>
   ${s.latitud!=null?`<p style="margin:12px 0 0"><a href="https://www.google.com/maps?q=${Number(s.latitud)},${Number(s.longitud)}" target="_blank" rel="noopener noreferrer">Ver la vivienda en el mapa</a> <span class="hint">· precisión ${Math.round(s.gps_precision_m||0)} m</span></p>`:''}<h3 style="margin-top:16px">Historial</h3><ul class="log">${log.map(l=>`<li>${fechaHora(l.creado_en)} · ${esc(l.accion)}${l.detalle?' · '+esc(l.detalle):''}</li>`).join('')}</ul></div>
@@ -413,7 +554,7 @@ function vParams(){
   const p=S.params,P=(k,t,desc,type='number')=>`<div class="param"><div><label class="t" for="p_${k}">${t}</label><p>${desc}</p></div><input id="p_${k}" data-p="${k}" type="${type}" value="${esc(p[k])}"></div>`;
   return `<h1>Parámetros de la caja</h1><p class="lead">Lo que aprueba la Asamblea. El formulario de los promotores usa estos valores.</p>
   <form class="card" id="paramsF" style="margin-top:16px">
-  ${P('nombre','Nombre de la caja','Encabezado de la ficha impresa.','text')}${P('lema','Lema','Debajo del nombre.','text')}${P('registro','No. de registro o personería','Según el Registro Nacional de Cajas Rurales o la SDE.','text')}
+  ${P('nombre','Nombre de la caja','Encabezado de la ficha impresa.','text')}${P('lema','Lema','Debajo del nombre.','text')}${P('registro','No. de registro o personería','Según el Registro Nacional de Cajas Rurales o la SDE.','text')}${P('nombre_legal','Nombre legal','Aparece en el encabezado y en la declaración de vinculación.','text')}${P('direccion','Dirección de la oficina','Encabezado de la ficha.','text')}${P('telefonos','Teléfonos','Encabezado de la ficha.','text')}${P('correo','Correo','Encabezado de la ficha.','text')}
   ${P('inscripcion','Cuota de inscripción (L)','No reembolsable.')}${P('aportacion','Aportación a capital (L)','Da derecho a voto; se devuelve según estatutos.')}${P('ahorro_min','Ahorro mínimo (L)','Mínimo del depósito inicial y de cada cuota.')}
   <div class="param"><div><label class="t" for="p_frecuencia">Frecuencia sugerida</label><p>Valor inicial en el formulario.</p></div><select id="p_frecuencia" data-p="frecuencia">${['Semanal','Quincenal','Mensual'].map(x=>`<option ${p.frecuencia===x?'selected':''}>${x}</option>`).join('')}</select></div>
   <div class="param"><div><label class="t" for="p_acepta_menores">Aceptar socios menores de edad</label><p>Ahorro infantil; exige datos del tutor.</p></div><select id="p_acepta_menores" data-p="acepta_menores"><option value="true" ${p.acepta_menores?'selected':''}>Sí</option><option value="false" ${!p.acepta_menores?'selected':''}>No</option></select></div>
@@ -437,7 +578,7 @@ function render(){
   if(!S.perfil||!S.perfil.activo){app.innerHTML=vPendiente();return}
   const v=S.view;
   app.innerHTML=v==='nueva'?vNueva():v==='envios'?vEnvios():v==='bandeja'?vBandeja():v==='usuarios'?vUsuarios():vParams();
-  if(v==='nueva'&&S.step===5&&!S.sent&&!S.busy){initSig('#sig','firma','#sigHint');initSig('#sig2','firmaTestigo','#sig2Hint')}
+  if(v==='nueva'&&S.step===STEP_DOCS&&!S.sent&&!S.busy){initSig('#sig','firma','#sigHint');initSig('#sig2','firmaTestigo','#sig2Hint')}
 }
 function go(step){S.step=step;S.errors={};render();window.scrollTo({top:0})}
 function setView(v){S.view=v;S.open=null;S.detail=null;S.sent=null;render();window.scrollTo({top:0});
@@ -482,7 +623,7 @@ document.addEventListener('click',async e=>{
   if(t.dataset.go!==undefined)go(+t.dataset.go);
   if(t.id==='prev')go(S.step-1);
   if(t.id==='next'){const er=validate(S.step);
-    if(!Object.keys(er).length&&S.step===0&&navigator.onLine){t.disabled=true;try{const{data}=await sb.rpc('dni_registrado',{p_dni:S.draft.dni});if(data)er.dni='Ya existe una solicitud vigente con este DNI.'}catch(x){}t.disabled=false}
+    if(!Object.keys(er).length&&S.step===0&&S.draft.tipoSolicitud==='Nueva'&&navigator.onLine){t.disabled=true;try{const{data}=await sb.rpc('dni_registrado',{p_dni:S.draft.dni});if(data)er.dni='Ya existe una solicitud vigente con este DNI.'}catch(x){}t.disabled=false}
     if(Object.keys(er).length){S.errors=er;render();toast('Revise los campos marcados')}else go(S.step+1)}
   if(t.id==='goBad')go(firstInvalid());
   if(t.id==='addB'){S.draft.benef.push({n:'',dni:'',p:'',pct:0});saveDraft();render()}
@@ -518,6 +659,8 @@ document.addEventListener('input',e=>{
   if(el.dataset.b!==undefined){let v=el.value;if(el.dataset.bk==='dni')v=el.value=v.replace(/\D/g,'').slice(0,13);d.benef[+el.dataset.b][el.dataset.bk]=el.dataset.bk==='pct'?Number(v):v;saveDraft();
     const sum=$('#sumB');if(sum){const tt=d.benef.reduce((s,b)=>s+Number(b.pct||0),0);sum.textContent='Total: '+tt+'%';sum.style.color=tt===100?'var(--ok)':'var(--warn)'}}
   if(el.dataset.t){let v=el.value;if(el.dataset.t==='dni')v=el.value=v.replace(/\D/g,'').slice(0,13);d.tutor[el.dataset.t]=v;saveDraft()}
+  if(el.dataset.o&&el.dataset.f){let v=el.value;if(el.dataset.f==='tel')v=el.value=v.replace(/[^\d-]/g,'').slice(0,9);d[el.dataset.o][el.dataset.f]=v;delete S.errors[el.dataset.o];saveDraft()}
+  if(el.dataset.a&&el.dataset.f){d[el.dataset.a][+el.dataset.i][el.dataset.f]=el.value;delete S.errors[el.dataset.a];saveDraft()}
   if(el.dataset.cy){let v=el.value;if(el.dataset.cy==='dni')v=el.value=v.replace(/\D/g,'').slice(0,13);d.conyuge[el.dataset.cy]=v;saveDraft()}
   if(el.dataset.tg){let v=el.value;if(el.dataset.tg==='dni')v=el.value=v.replace(/\D/g,'').slice(0,13);d.testigo[el.dataset.tg]=v;saveDraft()}
   if(el.dataset.r!==undefined&&el.tagName==='INPUT'){d.refs[+el.dataset.r][el.dataset.rk]=el.value;saveDraft()}
@@ -526,7 +669,7 @@ document.addEventListener('change',async e=>{
   const el=e.target,d=S.draft;
   if(el.dataset.urol){el.disabled=true;await uRpc('cambiar_rol',{p_id:el.dataset.urol,p_rol:el.value},'Rol actualizado');return}
   if(!d)return;
-  if(el.type==='radio'&&el.dataset.k){if(el.dataset.k==='tipoDoc'&&d.tipoDoc!==el.value)d.dni='';d[el.dataset.k]=el.value;delete S.errors[el.dataset.k];saveDraft();if(['pep','pago','tipoDoc','civil','famDir','llenado'].includes(el.dataset.k))render()}
+  if(el.type==='radio'&&el.dataset.k){if(el.dataset.k==='tipoDoc'&&d.tipoDoc!==el.value)d.dni='';d[el.dataset.k]=el.value;delete S.errors[el.dataset.k];saveDraft();if(['pep','pago','tipoDoc','civil','llenado','tipoSolicitud','otraNac','ocupacion','actividadCom','puntoFijo','remesas','vinculo'].includes(el.dataset.k))render()}
   if(el.type==='checkbox'&&el.dataset.k){d[el.dataset.k]=el.checked;saveDraft();if(el.dataset.k==='aRuego')render()}
   if(el.dataset.r!==undefined&&el.tagName==='SELECT'){d.refs[+el.dataset.r][el.dataset.rk]=el.value;saveDraft()}
   if(el.dataset.decl!==undefined){d.decl[+el.dataset.decl]=el.checked;saveDraft()}

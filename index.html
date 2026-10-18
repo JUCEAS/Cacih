@@ -141,6 +141,24 @@ table.plain th{font-size:12px;color:var(--muted);text-transform:uppercase;letter
 .sheet .sigs span{border-top:1px solid #333;padding-top:3px}
 .sheet .sigs img{max-height:48px;max-width:100%;margin:0 auto 3px}
 .sheet .foot{margin-top:10px;font-size:10px;color:#555;display:flex;justify-content:space-between}
+.legal{font-size:13px;line-height:1.5;color:var(--ink);text-align:justify;margin:6px 0}
+.sheet .hd2{display:grid;grid-template-columns:120px 1fr 96px;gap:12px;align-items:center;border-bottom:2px solid #173f2c;padding-bottom:8px}
+.sheet .hd2 .logo{width:120px;height:auto}
+.sheet .hd2 .ctr{text-align:center;font-size:11px;line-height:1.35}
+.sheet .hd2 .ctr b{font-family:var(--f-display);font-size:18px;color:#173f2c;letter-spacing:.06em}
+.sheet .hd2 .nl{font-weight:700;font-size:12.5px;margin:2px 0}
+.sheet .foto{width:96px;height:112px;border:1px solid #333;display:grid;place-items:center;color:#777;font-size:11px;overflow:hidden}
+.sheet .foto img{width:100%;height:100%;object-fit:cover}
+.sheet .tit{display:flex;gap:22px;align-items:center;justify-content:center;margin:8px 0 2px;font-size:12px}
+.sheet .tit b{font-size:13px;letter-spacing:.03em}
+.sheet .tit2{display:flex;flex-wrap:wrap;gap:6px 20px;justify-content:space-between;font-size:11px;margin-bottom:2px}
+.sheet table.kv td.k{width:20%}
+.sheet table.grid3{margin-top:4px}
+.sheet table.grid3 td.k{width:auto;text-align:center}
+.sheet p.q{margin:4px 0;font-size:11.5px}
+.sheet p.legal{font-size:10.5px;line-height:1.4;margin:3px 0;color:#111}
+.sheet .sigs .sn{font-size:11.5px;margin-bottom:4px;font-weight:600}
+@media print{.sheet h4{break-after:avoid}.sheet table{break-inside:avoid}}
 #print{display:none}
 #pdfArea{position:fixed;left:-10000px;top:0;width:816px;background:#fff}
 #pdfArea .sheet{min-width:0;border:0;border-radius:0;padding:36px 40px}
@@ -158,7 +176,7 @@ table.plain th{font-size:12px;color:var(--muted);text-transform:uppercase;letter
 </head>
 <body>
 <header class="top" id="hdr" hidden><div class="in">
-  <div class="brand"><svg width="34" height="34" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="31" fill="#b48a2c"/><circle cx="32" cy="32" r="26" fill="#173f2c"/><path d="M18 44 L28 32 L35 38 L46 22" fill="none" stroke="#f3e2b3" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 22 H46 V28" fill="none" stroke="#f3e2b3" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <div class="brand"><img src="logo-icono.png" width="38" height="38" alt="" style="border-radius:50%;background:#fff">
     <div><b>CACIH</b><small id="lema">Un camino hacia la inversión estratégica</small></div></div>
   <div class="who"><span id="whoName"></span><button id="pushBtn" hidden>Avisos</button><button id="logout">Salir</button></div>
   <nav class="tabs" role="tablist" id="tabs"></nav>
