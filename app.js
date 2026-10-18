@@ -1,7 +1,7 @@
 /* ================= Configuración ================= */
 const SUPABASE_URL='https://yjvhdkwdylrduunkbykw.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlqdmhka3dkeWxyZHV1bmtieWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyNjc1NzQsImV4cCI6MjEwNzg0MzU3NH0.r0b7VfCZIbTuEE7KA0vD-gUVfoZSfJSnyu-sLr-Xv2s';
-const VERSION='1.3.0';
+const VERSION='1.3.1';
 const VAPID_PUBLIC='BKdmYfjnL3uiR_q1sSb18aNBr2QnrcuWiZYZ8qwFTISiMWAzmgXHJcDMeQZGihYobRFfrj2FlSH1oXocK37StQo';
 const LIBS={
   xlsx:'vendor/xlsx.full.min.js',
