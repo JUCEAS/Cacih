@@ -11,7 +11,8 @@ Base de datos: Supabase, proyecto **cacih** (`yjvhdkwdylrduunkbykw`).
 | --- | --- |
 | `index.html` | Pantalla y estilos de la app |
 | `app.js` | Funcionamiento de la app (desde la versión 1.3) |
-| `credito.js` | Solicitud de crédito y fiador solidario (desde la versión 1.5) |
+| `credito.js` | Solicitud de crédito, fiador solidario y simulador (desde la versión 1.5) |
+| `seguridad.js` | Verificación en dos pasos, PIN, cierre a distancia, modo práctica (desde la versión 1.7) |
 | `logo-cacih.png`, `logo-icono.png` | Logo de CACIH (desde la versión 1.4) |
 | `vendor/` | Librerías de apoyo, incluidas en la app (6 archivos) |
 | `sw.js` | Permite abrirla sin señal |
@@ -90,6 +91,42 @@ Llega primero un aviso de prueba.
 - **iPhone:** primero hay que instalar la app (Compartir → Agregar a inicio) y activar los avisos desde la app instalada.
 - Si el navegador bloqueó los avisos, se permiten desde el candado junto a la dirección.
 - Al tocar **Salir**, ese dispositivo deja de recibir avisos.
+
+## Versión 1.7 · Mejoras del análisis
+
+### Instalar la 1.7
+1. La base de datos **ya quedó lista**.
+2. GitHub → suba `index.html`, `app.js`, `credito.js`, `sw.js` y **`seguridad.js`** (nuevo).
+3. Abra la app. En *Parámetros* debe decir **1.7.0**.
+
+### Lo primero que verá
+- **Oficina y Administrador:** la app pide activar la **verificación en dos pasos**. Instale Google Authenticator o Microsoft Authenticator, escanee el código QR y escriba el código de 6 dígitos. Desde ahí, cada vez que entre le pedirá el código. Sin él, la base de datos no le muestra nada de la oficina.
+  - Si pierde el teléfono con la app de códigos: Supabase → *Authentication → Users* → su usuario → borre el factor MFA y vuelva a activarlo.
+- **Todos:** la app pide crear un **PIN** de 4 a 6 números. Se pide al abrir la app y al volver después de 3 minutos. Con 5 intentos fallidos se cierra la sesión y se borra lo guardado en el teléfono.
+
+### Crédito
+- **Productos de crédito** (*Parámetros*): nombre, tasa, monto mínimo y máximo, plazo máximo. El promotor elige el producto y no puede cambiar la tasa.
+- **Capacidad de pago** (paso 4): ingresos, gastos y otras deudas del hogar. La app calcula el disponible y qué porcentaje es la cuota (límite en *Parámetros*, 40 % por defecto).
+- **Una sola solicitud pendiente por identidad.**
+- **Relación con CACIH** en la oficina: si es socio/a, otras solicitudes de crédito y si es fiador/a de alguien.
+- **Análisis de crédito**: lista de verificación (buró, visita, documentos, referencias, capacidad) que marca la solicitud como *En análisis*.
+
+### Simulador
+- Producto, comisión y seguro: muestra el **costo anual total** y el costo total del crédito.
+- **Enviar por WhatsApp**: comparte el PDF del plan de pagos.
+- Funciona **sin internet** (el PDF también, desde la 1.7). Enviar por WhatsApp necesita señal.
+
+### Seguridad y operación
+- **DNI**: revisa el departamento (01–18) y el año de inscripción contra la fecha de nacimiento. Si es inscripción tardía, se confirma con una casilla.
+- **Cerrar sesiones** (*Usuarios*): cierra la app y borra lo guardado en los teléfonos de esa persona en cuanto tengan señal.
+- **Errores recientes** (*Parámetros*): fallos de envío y de pantalla en los teléfonos.
+- **Aviso de versión nueva**: cuando suba una actualización, aparece *Actualizar*.
+- **Modo práctica** (botón *Práctica* arriba): llena formularios sin enviarlos. En crédito trae *Llenar con un ejemplo*. Sirve para capacitar promotores.
+- En el teléfono, los botones *Atrás / Siguiente* quedan fijos abajo y hay una barra de avance.
+
+### Lo que debe hacer usted en Supabase
+- Pasar al **plan Pro** (respaldos diarios, sin pausas).
+- *Authentication → Sign In / Providers*: desactivar **Allow new users to sign up** cuando todos los promotores tengan cuenta, y activar la protección de contraseñas filtradas (requiere Pro).
 
 ## Versión 1.6 · Simulador de préstamo
 

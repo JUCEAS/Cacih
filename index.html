@@ -167,6 +167,23 @@ table.amort{width:100%;border-collapse:collapse;font-size:13px}table.amort th{te
 table.amort td{padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}table.amort td.num{text-align:right;font-variant-numeric:tabular-nums}
 table.amort tr.tot td{font-weight:700;border-top:2px solid var(--ink)}table.cmp tr.on td{background:var(--accent-soft);font-weight:600}
 .sheet table.amort td{padding:2px 6px;font-size:9.5px}
+.kpis.mini{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-top:8px}.kpis.mini>div{border:1px solid var(--line);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column}.kpis.mini span{font-size:11.5px;color:var(--muted)}.kpis.mini b{font-size:15px}
+.p-an{background:var(--accent-soft);color:var(--accent)}
+.prog{height:6px;border-radius:4px;background:var(--line);overflow:hidden;margin:14px 0 -6px}.prog i{display:block;height:100%;background:var(--accent-2);transition:width .3s}
+.btn-wa{background:#1f7a46;border-color:#1f7a46;color:#fff}
+.prod{border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:10px}
+ol.pasos{padding-left:20px;line-height:1.6;font-size:14px}
+#lock{position:fixed;inset:0;z-index:100;background:var(--bg);display:grid;place-items:center;padding:16px}#lock[hidden]{display:none}
+.lockbox{max-width:340px;width:100%;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}.lockbox form{width:100%}.lockbox input{font-size:26px;letter-spacing:.4em;text-align:center}
+body.locked{overflow:hidden}
+.updbar{position:fixed;left:12px;right:12px;bottom:12px;z-index:90;background:var(--ink);color:var(--surface);border-radius:12px;padding:10px 14px;display:flex;gap:10px;align-items:center;justify-content:space-between;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.who button.on{background:var(--gold);color:#17241c}
+body.practica .wrap::before{content:"MODO PRÁCTICA · nada se envía a la oficina";display:block;text-align:center;font:700 12px var(--f-body);letter-spacing:.06em;background:var(--gold-soft);color:var(--ink);border-radius:8px;padding:6px;margin-bottom:10px}
+@media (max-width:640px){
+  button,.btn{min-height:44px}.btn-sm{min-height:38px}.chips label{padding:10px 14px;font-size:15px}
+  .rowbtns.navfija{position:sticky;bottom:0;z-index:5;background:var(--surface);margin:16px -20px -20px;padding:12px 20px;border-top:1px solid var(--line);border-radius:0 0 12px 12px}
+  .rowbtns.navfija button{flex:1}
+}
 @media print{.sheet h4{break-after:avoid}.sheet table{break-inside:avoid}}
 #print{display:none}
 #pdfArea{position:fixed;left:-10000px;top:0;width:816px;background:#fff}
@@ -198,6 +215,7 @@ table.amort tr.tot td{font-weight:700;border-top:2px solid var(--ink)}table.cmp 
 
 <script src="app.js" defer></script>
 <script src="credito.js" defer></script>
+<script src="seguridad.js" defer></script>
 
 </body>
 </html>

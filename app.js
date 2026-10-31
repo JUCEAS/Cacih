@@ -1,7 +1,7 @@
 /* ================= Configuración ================= */
 const SUPABASE_URL='https://yjvhdkwdylrduunkbykw.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlqdmhka3dkeWxyZHV1bmtieWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyNjc1NzQsImV4cCI6MjEwNzg0MzU3NH0.r0b7VfCZIbTuEE7KA0vD-gUVfoZSfJSnyu-sLr-Xv2s';
-const VERSION='1.6.0';
+const VERSION='1.7.0';
 const VAPID_PUBLIC='BKdmYfjnL3uiR_q1sSb18aNBr2QnrcuWiZYZ8qwFTISiMWAzmgXHJcDMeQZGihYobRFfrj2FlSH1oXocK37StQo';
 const LIBS={
   xlsx:'vendor/xlsx.full.min.js',
@@ -46,6 +46,14 @@ const fmtDni=v=>{const d=String(v||'').replace(/\D/g,'');return d.length===13?d.
 const fecha=s=>s?new Date(s).toLocaleDateString('es-HN',{day:'2-digit',month:'short',year:'numeric'}):'';
 const fechaHora=s=>s?new Date(s).toLocaleString('es-HN',{day:'2-digit',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}):'';
 function edad(nac){if(!nac)return null;const b=new Date(nac+'T12:00'),n=new Date();let a=n.getFullYear()-b.getFullYear();const m=n.getMonth()-b.getMonth();if(m<0||(m===0&&n.getDate()<b.getDate()))a--;return a}
+/* DNI hondureño: 2 dígitos de departamento (01–18), 2 de municipio, 4 del año de inscripción del nacimiento (igual o un año después del nacimiento), 5 de registro. */
+function dniRevisar(dni,nac){if(!/^\d{13}$/.test(dni||''))return null;const dep=+dni.slice(0,2),y=+dni.slice(4,8),hoy=new Date().getFullYear();
+  if(dep<1||dep>18)return{bloquea:1,msg:'Los 2 primeros dígitos del DNI son el departamento (01 a 18). Revise el número.'};
+  if(y<1900||y>hoy)return{bloquea:1,msg:'Los dígitos 5 a 8 del DNI son el año de inscripción del nacimiento. Revise el número.'};
+  if(!nac)return null;const yn=+nac.slice(0,4);
+  if(y<yn)return{bloquea:1,msg:`El DNI indica inscripción en ${y}, antes de la fecha de nacimiento (${yn}). Revise el DNI o la fecha.`};
+  if(y>yn+1)return{bloquea:0,msg:`El DNI indica inscripción en ${y}, pero nació en ${yn}. Si fue inscripción tardía, confírmelo.`};return null}
+function dniCasilla(dni,nac,attr,ok){const r=dniRevisar(dni,nac);return r&&!r.bloquea?`<label class="check"><input type="checkbox" ${attr} ${ok?'checked':''}><span>${esc(r.msg)} <b>Confirmo que el DNI y la fecha están correctos.</b></span></label>`:''}
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&3|8)).toString(16)});
 function toast(m,ms=2600){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,ms)}
 const isOficina=()=>S.perfil&&S.perfil.activo&&['oficina','admin'].includes(S.perfil.rol);
@@ -91,6 +99,7 @@ function validate(step){
     if(!d.a1.trim())e.a1='Escriba el primer apellido.';
     if(d.tipoDoc==='DNI'?!/^\d{13}$/.test(d.dni):!/^[A-Za-z0-9-]{5,20}$/.test(d.dni))e.dni=d.tipoDoc==='DNI'?'El DNI debe tener 13 dígitos.':'Número de documento de 5 a 20 letras o números.';
     else if(d.tipoSolicitud==='Nueva'&&S.queue.some(q=>q.d.dni===d.dni&&q.d.client_id!==d.client_id))e.dni='Este documento ya está en su cola de envío.';
+    else if(d.tipoDoc==='DNI'){const r=dniRevisar(d.dni,d.nac);if(r&&(r.bloquea||!d.dniConfirm))e.dni=r.msg}
     if(!d.paisEmisor.trim())e.paisEmisor='Indique el país que emitió el documento.';
     if(!d.docVence)e.docVence='Indique la fecha de vencimiento del documento.';
     else if(new Date(d.docVence+'T23:59')<new Date())e.docVence='El documento está vencido. Pida al solicitante que lo renueve antes de afiliarse.';
@@ -228,14 +237,15 @@ async function syncQueue(){
   S.syncing=true;netbar();let ok=0;
   for(const item of [...S.queue]){
     try{const r=await uploadOne(item);S.queue=S.queue.filter(q=>q.d.client_id!==item.d.client_id);ok++;item.folio=r.folio}
-    catch(e){item.error=errMsg(e);if(/Sin conexión/.test(item.error))break}
+    catch(e){item.error=errMsg(e);if(/Sin conexión/.test(item.error))break;if(typeof registrarError==='function')registrarError('envío '+(item.kind||'afiliación'),item.error)}
   }
   await saveQueue();S.syncing=false;netbar();
   if(ok){toast(ok===1?'Solicitud enviada a la oficina':ok+' solicitudes enviadas a la oficina');if(S.view==='envios')loadMine()}
   if(['envios','nueva','credito'].includes(S.view))render();
 }
 async function enviar(){
-  const d=S.draft;const item={d:JSON.parse(JSON.stringify(d)),creado:new Date().toISOString(),error:null};
+  const d=S.draft;
+  if(S.practica){S.draft=blankDraft();await idb.set('draft',S.draft);S.step=0;S.sent={folio:'PRÁCTICA',nombre:d.nombres+' '+d.apellidos,dni:d.dni,online:true,practica:true};render();return}const item={d:JSON.parse(JSON.stringify(d)),creado:new Date().toISOString(),error:null};
   S.queue.push(item);await saveQueue();
   S.draft=blankDraft();await idb.set('draft',S.draft);S.step=0;
   if(navigator.onLine){S.busy=true;render();
@@ -414,12 +424,12 @@ function vPendiente(){
 
 function vNueva(){
   if(S.busy)return `<div class="card empty"><span class="spin"></span> Enviando solicitud y documentos…</div>`;
-  if(S.sent){const s=S.sent;return `<div class="card" style="text-align:center;padding:32px 20px"><h1>${s.online?'Solicitud enviada':'Guardada para enviar'}</h1><p class="lead">${s.online?'La oficina ya la recibió como pendiente de aprobación.':s.error?'No se pudo enviar: '+esc(s.error)+' Quedó en la cola.':'No hay señal. Se enviará sola cuando el teléfono tenga conexión.'}</p>${s.folio?`<p class="mono" style="font-size:24px;color:var(--accent-2);margin:12px 0">${esc(s.folio)}</p>`:''}<p class="hint">${esc(s.nombre)} · DNI ${esc(fmtDni(s.dni))}</p><div class="warnnote" style="margin-top:14px;text-align:left">Recuerde al solicitante: el ahorro inicial se entrega en la reunión o se deposita en la cuenta de la caja. El promotor no recibe dinero.</div><div class="rowbtns" style="justify-content:center"><button class="btn-primary" id="newReq">Nueva solicitud</button><button id="goEnvios">Ver mis envíos</button></div></div>`}
+  if(S.sent){const s=S.sent;return `<div class="card" style="text-align:center;padding:32px 20px"><h1>${s.practica?'Práctica terminada':s.online?'Solicitud enviada':'Guardada para enviar'}</h1><p class="lead">${s.practica?'Modo práctica: esta solicitud no se envió a la oficina.':s.online?'La oficina ya la recibió como pendiente de aprobación.':s.error?'No se pudo enviar: '+esc(s.error)+' Quedó en la cola.':'No hay señal. Se enviará sola cuando el teléfono tenga conexión.'}</p>${s.folio?`<p class="mono" style="font-size:24px;color:var(--accent-2);margin:12px 0">${esc(s.folio)}</p>`:''}<p class="hint">${esc(s.nombre)} · DNI ${esc(fmtDni(s.dni))}</p><div class="warnnote" style="margin-top:14px;text-align:left">Recuerde al solicitante: el ahorro inicial se entrega en la reunión o se deposita en la cuenta de la caja. El promotor no recibe dinero.</div><div class="rowbtns" style="justify-content:center"><button class="btn-primary" id="newReq">Nueva solicitud</button><button id="goEnvios">Ver mis envíos</button></div></div>`}
   const d=S.draft,s=S.step,a=edad(d.nac),p=S.params;let body='';
   if(s===0)body=`<div class="grid">${chips('tipoCuenta','Ficha de registro de ingreso',['Socio','Ahorro con propósito'],{req:1,full:1})}${chips('tipoSolicitud','Tipo de solicitud',['Nueva','Actualización'],{req:1,full:1})}${d.tipoSolicitud==='Actualización'?inp('codigoAnterior','Cliente Nº actual',{mono:1,ph:'Si lo conoce',hint:'Para actualizar los datos de un socio que ya existe.'}):''}
   <div class="f full"><h3>1. Datos generales del cliente</h3></div>
   ${inp('n1','1er nombre',{req:1})}${inp('n2','2do nombre')}${inp('a1','1er apellido',{req:1})}${inp('a2','2do apellido')}${inp('conocido','Conocido como',{ph:'Opcional'})}
-  ${chips('tipoDoc','Tipo de identificación',['DNI','Carné de residente','Pasaporte'],{req:1,full:1})}${d.tipoDoc==='DNI'?inp('dni','Nº de identificación',{req:1,mono:1,mode:'numeric',max:13,ph:'0000000000000',hint:'13 dígitos, sin guiones'}):inp('dni','Nº de '+d.tipoDoc.toLowerCase(),{req:1,mono:1,max:20,hint:'Como aparece en el documento'})}${inp('paisEmisor','País emisor',{req:1})}${inp('docVence','Vencimiento del documento',{req:1,type:'date'})}
+  ${chips('tipoDoc','Tipo de identificación',['DNI','Carné de residente','Pasaporte'],{req:1,full:1})}${d.tipoDoc==='DNI'?inp('dni','Nº de identificación',{req:1,mono:1,mode:'numeric',max:13,ph:'0000000000000',hint:'13 dígitos, sin guiones'}):inp('dni','Nº de '+d.tipoDoc.toLowerCase(),{req:1,mono:1,max:20,hint:'Como aparece en el documento'})}<div class="f full" id="dckA" style="margin:0">${dniCasilla(d.tipoDoc==='DNI'?d.dni:'',d.nac,'data-k="dniConfirm"',d.dniConfirm)}</div>${inp('paisEmisor','País emisor',{req:1})}${inp('docVence','Vencimiento del documento',{req:1,type:'date'})}
   ${inp('lugarNac','Lugar de nacimiento',{req:1,ph:'Municipio y departamento, o país'})}${inp('nac','Fecha de nacimiento',{req:1,type:'date',hint:a!==null&&a>=0?`Edad: ${a} años${a<18?' · requiere tutor':''}`:''})}${inp('nacionalidad','Nacionalidad',{req:1})}${inp('paisRes','País de residencia',{req:1})}
   ${chips('sexo','Sexo',['Mujer','Hombre'],{req:1})}${chips('civil','Estado civil',['Soltero/a','Casado/a','Unión libre','Viudo/a','Divorciado/a'],{full:1})}${chips('escolaridad','Nivel de escolaridad',['Ninguno','Primario','Secundario','Universitario','Postgrado'],{full:1})}${inp('depend','No. de dependientes',{type:'number',mode:'numeric'})}
   ${chips('otraNac','¿Tiene usted otra(s) nacionalidad(es) o es residente legal de otro(s) país(es)?',['Sí','No'],{req:1,full:1})}${d.otraNac==='Sí'?d.otrosPaises.map((x,i)=>inpA('otrosPaises',i,'pais','País '+(i+1),{req:i===0})+selA('otrosPaises',i,'tipo','Nacionalidad o residencia',['Nacionalidad','Residencia'],{req:i===0})).join('')+`<div class="f full">${err('otrosPaises')}</div>`:''}
@@ -446,7 +456,7 @@ function vNueva(){
   return `<h1>Nueva solicitud de afiliación</h1><p class="lead">Llenar junto al solicitante, en su casa o en la reunión. El borrador se guarda solo.</p>
   <div class="steps">${STEPS.map((x,i)=>`<button data-go="${i}" class="${i===s?'cur':''} ${i<s?'done':''}"><span class="l">${x.k}</span>${x.t}</button>`).join('')}</div>
   <div class="card"><h2 style="margin-bottom:14px"><span class="hint" style="font-family:var(--f-body);font-weight:600">Paso ${s+1} de ${STEPS.length} · </span>${STEPS[s].t}</h2>${body}
-  <div class="rowbtns"><button id="prev" ${s===0?'disabled':''}>Atrás</button>${s<LAST?`<button class="btn-primary" id="next">Siguiente</button>`:`<button class="btn-primary" id="send" ${firstInvalid()>=0?'disabled':''}>${navigator.onLine?'Enviar a la oficina':'Guardar para enviar'}</button>`}</div></div>
+  <div class="rowbtns navfija"><button id="prev" ${s===0?'disabled':''}>Atrás</button>${s<LAST?`<button class="btn-primary" id="next">Siguiente</button>`:`<button class="btn-primary" id="send" ${firstInvalid()>=0?'disabled':''}>${navigator.onLine?'Enviar a la oficina':'Guardar para enviar'}</button>`}</div></div>
   <p style="margin-top:14px"><button id="resetDraft" class="btn-bad btn-sm">Descartar borrador</button></p>`;
 }
 
@@ -544,7 +554,7 @@ function vUsuarios(){
       <span class="pill ${e==='Activo'?'p-ok':e==='Suspendido'?'p-bad':'p-pend'}">${e==='Pendiente'?'Pendiente de activar':e}</span></div>
     ${me?'':`<div class="actions" style="margin-top:10px">
       <div class="f" style="width:170px"><label class="t" for="rol_${u.user_id}">Rol</label><select id="rol_${u.user_id}" data-urol="${u.user_id}">${['promotor','oficina','admin'].map(r=>`<option value="${r}" ${u.rol===r?'selected':''}>${r==='admin'?'Administrador':r==='oficina'?'Oficina':'Promotor'}</option>`).join('')}</select></div>
-      ${e==='Activo'?`<button class="btn-bad" data-usus="${u.user_id}">Suspender</button>`:`<button class="btn-primary" data-uact="${u.user_id}">${e==='Suspendido'?'Reactivar':'Activar'}</button>`}
+      ${u.user_id!==S.session.user.id?`<button data-urev="${u.user_id}" title="Cierra la app en todos sus teléfonos y borra lo guardado en ellos">Cerrar sesiones</button>`:''}${e==='Activo'?`<button class="btn-bad" data-usus="${u.user_id}">Suspender</button>`:`<button class="btn-primary" data-uact="${u.user_id}">${e==='Suspendido'?'Reactivar':'Activar'}</button>`}
       ${e!=='Activo'?`<button class="btn-bad" data-udel="${u.user_id}" ${hist?'disabled title="Tiene historial: solo se puede suspender"':''}>Eliminar</button>`:''}
     </div>
     ${open&&S.uAction.tipo==='sus'?`<div class="actions" style="border-top:1px solid var(--line);padding-top:12px"><div class="f" style="flex:1;min-width:200px"><label class="t" for="susMotivo">Motivo de la suspensión</label><input id="susMotivo" placeholder="Ej. ya no labora con la caja"></div><button class="btn-bad" data-ususok="${u.user_id}">Confirmar suspensión</button><button class="btn-sm" data-ucancel>Cancelar</button></div><p class="hint" style="margin:6px 0 0">Pierde el acceso de inmediato y deja de recibir avisos. Sus solicitudes y su historial se conservan.</p>`:''}
@@ -566,7 +576,8 @@ function vParams(){
   <div class="param"><div><label class="t" for="p_acepta_menores">Aceptar socios menores de edad</label><p>Ahorro infantil; exige datos del tutor.</p></div><select id="p_acepta_menores" data-p="acepta_menores"><option value="true" ${p.acepta_menores?'selected':''}>Sí</option><option value="false" ${!p.acepta_menores?'selected':''}>No</option></select></div>
   <div class="param"><div><label class="t" for="p_exportar_solo_admin">Quién puede exportar listados</label><p>Excel y PDF con los datos de todos los socios. Cada exportación queda registrada.</p></div><select id="p_exportar_solo_admin" data-p="exportar_solo_admin"><option value="true" ${p.exportar_solo_admin!==false?'selected':''}>Solo el administrador</option><option value="false" ${p.exportar_solo_admin===false?'selected':''}>Oficina y administrador</option></select></div>
   ${P('minutos_inactividad','Cierre de sesión por inactividad (minutos)','Para Oficina y Administrador. Entre 5 y 120.')}
-  <div class="rowbtns"><span class="hint">Versión de la app ${VERSION}</span><button class="btn-primary" type="submit">Guardar parámetros</button></div></form>`;
+  ${P('limite_cuota_ingreso','Límite cuota / ingreso disponible (%)','La app avisa cuando la cuota pasa de este porcentaje. Entre 10 y 100.')}
+  <div class="rowbtns"><span class="hint">Versión de la app ${VERSION}</span><button class="btn-primary" type="submit">Guardar parámetros</button></div></form>${vProductos()}${vErrores()}`;
 }
 
 /* ================= Render ================= */
@@ -581,6 +592,7 @@ function render(){
   const app=$('#app');
   if(!S.session){$('#hdr').hidden=true;app.innerHTML=vAuth(S.authMode||'login');return}
   $('#hdr').hidden=false;$('#whoName').textContent=(S.perfil?.nombre||S.session.user.email).split(' ')[0];tabs();netbar();
+  if(S.mfa){$('#tabs').innerHTML='';app.innerHTML=vMfa();return}
   if(!S.perfil||!S.perfil.activo){app.innerHTML=vPendiente();return}
   const v=S.view;
   if(v==='credito')cAbrir();
@@ -590,7 +602,7 @@ function render(){
 }
 function go(step){S.step=step;S.errors={};render();window.scrollTo({top:0})}
 function setView(v){S.view=v;S.open=null;S.detail=null;S.sent=null;S.copen=null;S.cdetail=null;S.csent=null;render();window.scrollTo({top:0});
-  if(v==='bandeja'){if(S.btipo==='creditos')loadCreditos();else loadBandeja()}if(v==='envios'&&navigator.onLine)loadMine();if(v==='usuarios')loadUsuarios();if(v==='params')loadParams().then(render)}
+  if(v==='bandeja'){if(S.btipo==='creditos')loadCreditos();else loadBandeja()}if(v==='envios'&&navigator.onLine)loadMine();if(v==='usuarios')loadUsuarios();if(v==='params'){S.prodEdit=null;S.errores=undefined;loadParams().then(render)}}
 
 /* ================= Eventos ================= */
 document.addEventListener('submit',async e=>{
@@ -663,6 +675,7 @@ document.addEventListener('click',async e=>{
 });
 document.addEventListener('input',e=>{
   const el=e.target,d=S.draft;if(!d)return;
+  if(el.dataset.k==='dni'||el.dataset.k==='nac'){setTimeout(()=>{const b=$('#dckA');if(b)b.innerHTML=dniCasilla(S.draft.tipoDoc==='DNI'?S.draft.dni:'',S.draft.nac,'data-k="dniConfirm"',S.draft.dniConfirm)})}
   if(el.dataset.k&&el.type!=='radio'&&el.type!=='checkbox'){let v=el.value;if(el.dataset.k==='dni')v=el.value=d.tipoDoc==='DNI'?v.replace(/\D/g,'').slice(0,13):v.replace(/[^A-Za-z0-9-]/g,'').toUpperCase().slice(0,20);d[el.dataset.k]=v;delete S.errors[el.dataset.k];saveDraft()}
   if(el.dataset.b!==undefined){let v=el.value;if(el.dataset.bk==='dni')v=el.value=v.replace(/\D/g,'').slice(0,13);d.benef[+el.dataset.b][el.dataset.bk]=el.dataset.bk==='pct'?Number(v):v;saveDraft();
     const sum=$('#sumB');if(sum){const tt=d.benef.reduce((s,b)=>s+Number(b.pct||0),0);sum.textContent='Total: '+tt+'%';sum.style.color=tt===100?'var(--ok)':'var(--warn)'}}
@@ -678,7 +691,7 @@ document.addEventListener('change',async e=>{
   if(el.dataset.urol){el.disabled=true;await uRpc('cambiar_rol',{p_id:el.dataset.urol,p_rol:el.value},'Rol actualizado');return}
   if(!d)return;
   if(el.type==='radio'&&el.dataset.k){if(el.dataset.k==='tipoDoc'&&d.tipoDoc!==el.value)d.dni='';d[el.dataset.k]=el.value;delete S.errors[el.dataset.k];saveDraft();if(['pep','pago','tipoDoc','civil','llenado','tipoSolicitud','otraNac','ocupacion','actividadCom','puntoFijo','remesas','vinculo'].includes(el.dataset.k))render()}
-  if(el.type==='checkbox'&&el.dataset.k){d[el.dataset.k]=el.checked;saveDraft();if(el.dataset.k==='aRuego')render()}
+  if(el.type==='checkbox'&&el.dataset.k){d[el.dataset.k]=el.checked;saveDraft();if(el.dataset.k==='aRuego')render();if(el.dataset.k==='dniConfirm'){delete S.errors.dni}}
   if(el.dataset.r!==undefined&&el.tagName==='SELECT'){d.refs[+el.dataset.r][el.dataset.rk]=el.value;saveDraft()}
   if(el.dataset.decl!==undefined){d.decl[+el.dataset.decl]=el.checked;saveDraft()}
   if(el.dataset.k==='nac'||el.dataset.k==='depto')render();
@@ -721,20 +734,22 @@ async function boot(session){
   S.session=session;
   if(!session){S.perfil=null;render();return}
   await Promise.all([loadPerfil(),loadParams()]);
+  if(await revisarRevocacion())return;
+  if(await mfaGate()){render();return}
   const dr=await idb.get('draft').catch(()=>null);S.draft=dr?completarDraft(dr):blankDraft();
   S.queue=((await idb.get('queue').catch(()=>null))||[]).map(q=>q.kind==='credito'?{...q,d:cCompletar(q.d)}:{...q,d:completarDraft(q.d)});
   const cd=await idb.get('cdraft').catch(()=>null);S.cdraft=cd?cCompletar(cd):null;ultimaActividad=Date.now();
   if(isOficina()&&S.view==='nueva'&&!S.draft.nombres){S.view='bandeja';loadBandeja()}
-  render();countPend();syncQueue();pushState();
+  render();pinArranque();countPend();syncQueue();pushState();
   if(location.hash&&S.perfil?.activo)irA(location.hash);
 }
 let booted=false;
-sb.auth.onAuthStateChange((ev,session)=>{
+document.addEventListener('DOMContentLoaded',()=>sb.auth.onAuthStateChange((ev,session)=>{
   if(ev==='INITIAL_SESSION'){booted=true;boot(session)}
   else if(ev==='SIGNED_IN'&&(!S.session||S.session.user.id!==session.user.id)){S.view='nueva';boot(session)}
   else if(ev==='SIGNED_OUT'){limpiarDispositivo();S.session=null;S.perfil=null;S.view='nueva';S.authMode='login';S.open=null;render();if(S.motivoSalida){toast(S.motivoSalida,6000);S.motivoSalida=null}}
   else if(session)S.session=session;
-});
+}));
 window.addEventListener('online',()=>{netbar();syncQueue();if(S.view==='nueva')render()});
 window.addEventListener('offline',()=>{netbar();if(S.view==='nueva')render()});
 setInterval(()=>{syncQueue();if(S.view==='bandeja'&&!S.open&&navigator.onLine)countPend()},60000);
