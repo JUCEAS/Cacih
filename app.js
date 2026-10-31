@@ -1,7 +1,7 @@
 /* ================= Configuración ================= */
 const SUPABASE_URL='https://yjvhdkwdylrduunkbykw.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlqdmhka3dkeWxyZHV1bmtieWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyNjc1NzQsImV4cCI6MjEwNzg0MzU3NH0.r0b7VfCZIbTuEE7KA0vD-gUVfoZSfJSnyu-sLr-Xv2s';
-const VERSION='1.7.1';
+const VERSION='1.8.0';
 const VAPID_PUBLIC='BKdmYfjnL3uiR_q1sSb18aNBr2QnrcuWiZYZ8qwFTISiMWAzmgXHJcDMeQZGihYobRFfrj2FlSH1oXocK37StQo';
 const LIBS={
   xlsx:'vendor/xlsx.full.min.js',
@@ -456,7 +456,7 @@ function vNueva(){
   return `<h1>Nueva solicitud de afiliación</h1><p class="lead">Llenar junto al solicitante, en su casa o en la reunión. El borrador se guarda solo.</p>
   <div class="steps">${STEPS.map((x,i)=>`<button data-go="${i}" class="${i===s?'cur':''} ${i<s?'done':''}"><span class="l">${x.k}</span>${x.t}</button>`).join('')}</div>
   <div class="card"><h2 style="margin-bottom:14px"><span class="hint" style="font-family:var(--f-body);font-weight:600">Paso ${s+1} de ${STEPS.length} · </span>${STEPS[s].t}</h2>${body}
-  <div class="rowbtns navfija"><button id="prev" ${s===0?'disabled':''}>Atrás</button>${s<LAST?`<button class="btn-primary" id="next">Siguiente</button>`:`<button class="btn-primary" id="send" ${firstInvalid()>=0?'disabled':''}>${navigator.onLine?'Enviar a la oficina':'Guardar para enviar'}</button>`}</div></div>
+  <div class="rowbtns navfija"><button id="prev" ${s===0?'disabled':''}>Atrás</button>${s<LAST?`<button class="btn-primary" id="next">Siguiente</button>`:(S.practica?`<button id="send" ${firstInvalid()>=0?'disabled':''}>Terminar práctica (no se envía)</button><button class="btn-primary" id="sendReal" ${firstInvalid()>=0?'disabled':''}>Es un cliente real: enviar</button>`:`<button class="btn-primary" id="send" ${firstInvalid()>=0?'disabled':''}>${navigator.onLine?'Enviar a la oficina':'Guardar para enviar'}</button>`)}</div></div>
   <p style="margin-top:14px"><button id="resetDraft" class="btn-bad btn-sm">Descartar borrador</button></p>`;
 }
 
@@ -579,11 +579,11 @@ function vParams(){
   ${P('minutos_inactividad','Cierre de sesión por inactividad (minutos)','Para Oficina y Administrador. Entre 5 y 120.')}
   <div class="param"><div><label class="t" for="p_pedir_pin">Pedir PIN en los teléfonos</label><p>Un PIN de 4 a 6 números para abrir la app. Protege las fotos de identidad si se pierde un teléfono.</p></div><select id="p_pedir_pin" data-p="pedir_pin"><option value="false" ${!p.pedir_pin?'selected':''}>No, solo la contraseña</option><option value="true" ${p.pedir_pin?'selected':''}>Sí, pedir PIN</option></select></div>
   ${P('limite_cuota_ingreso','Límite cuota / ingreso disponible (%)','La app avisa cuando la cuota pasa de este porcentaje. Entre 10 y 100.')}
-  <div class="rowbtns"><span class="hint">Versión de la app ${VERSION}</span><button class="btn-primary" type="submit">Guardar parámetros</button></div></form>${vProductos()}${vErrores()}`;
+  <div class="rowbtns"><span class="hint">Versión de la app ${VERSION}</span><button class="btn-primary" type="submit">Guardar parámetros</button></div></form>${vErrores()}`;
 }
 
 /* ================= Render ================= */
-function tabsFor(){const t=[];if(S.perfil?.activo){t.push(['nueva','Nueva solicitud'],['credito','Crédito'],['simulador','Simulador'],['envios','Mis envíos'+(S.queue.length?` <span class="badge">${S.queue.length}</span>`:'')]);if(isOficina())t.push(['bandeja','Bandeja'+(S.pend?` <span class="badge">${S.pend}</span>`:'')]);if(isAdmin())t.push(['usuarios','Usuarios'],['params','Parámetros'])}return t}
+function tabsFor(){const t=[];if(S.perfil?.activo){t.push(['nueva','Nueva solicitud'],['credito','Crédito'],['simulador','Simulador'],['envios','Mis envíos'+(S.queue.length?` <span class="badge">${S.queue.length}</span>`:'')]);if(isOficina())t.push(['bandeja','Bandeja'+(S.pend?` <span class="badge">${S.pend}</span>`:'')]);if(isOficina())t.push(['tasas','Tasas']);if(isAdmin())t.push(['usuarios','Usuarios'],['params','Parámetros'])}return t}
 function tabs(){$('#tabs').innerHTML=tabsFor().map(([k,l])=>`<button role="tab" data-tab="${k}" aria-selected="${S.view===k}">${l}</button>`).join('')}
 function netbar(){const b=$('#netbar');if(!S.session){b.hidden=true;return}
   if(!navigator.onLine){b.hidden=false;b.textContent='Sin conexión · puede seguir llenando solicitudes; se enviarán al volver la señal'+(S.queue.length?` (${S.queue.length} en espera)`:'')}
@@ -598,13 +598,13 @@ function render(){
   if(!S.perfil||!S.perfil.activo){app.innerHTML=vPendiente();return}
   const v=S.view;
   if(v==='credito')cAbrir();
-  app.innerHTML=v==='simulador'?vSimulador():v==='credito'?vCredito():v==='nueva'?vNueva():v==='envios'?vEnvios():v==='bandeja'?vBandeja():v==='usuarios'?vUsuarios():vParams();
+  app.innerHTML=v==='tasas'?vTasas():v==='simulador'?vSimulador():v==='credito'?vCredito():v==='nueva'?vNueva():v==='envios'?vEnvios():v==='bandeja'?vBandeja():v==='usuarios'?vUsuarios():vParams();
   if(v==='nueva'&&S.step===STEP_DOCS&&!S.sent&&!S.busy){initSig('#sig','firma','#sigHint');initSig('#sig2','firmaTestigo','#sig2Hint')}
   if(v==='credito'&&!S.csent&&!S.cbusy)cInitSigs();
 }
 function go(step){S.step=step;S.errors={};render();window.scrollTo({top:0})}
 function setView(v){S.view=v;S.open=null;S.detail=null;S.sent=null;S.copen=null;S.cdetail=null;S.csent=null;render();window.scrollTo({top:0});
-  if(v==='bandeja'){if(S.btipo==='creditos')loadCreditos();else loadBandeja()}if(v==='envios'&&navigator.onLine)loadMine();if(v==='usuarios')loadUsuarios();if(v==='params'){S.prodEdit=null;S.errores=undefined;loadParams().then(render)}}
+  if(v==='bandeja'){if(S.btipo==='creditos')loadCreditos();else loadBandeja()}if(v==='envios'&&navigator.onLine)loadMine();if(v==='usuarios')loadUsuarios();if(v==='params'){S.errores=undefined;loadParams().then(render)}if(v==='tasas'){S.prodEdit=null;loadParams().then(render)}}
 
 /* ================= Eventos ================= */
 document.addEventListener('submit',async e=>{
@@ -752,7 +752,7 @@ document.addEventListener('DOMContentLoaded',()=>sb.auth.onAuthStateChange((ev,s
   else if(ev==='SIGNED_OUT'){limpiarDispositivo();S.session=null;S.perfil=null;S.view='nueva';S.authMode='login';S.open=null;render();if(S.motivoSalida){toast(S.motivoSalida,6000);S.motivoSalida=null}}
   else if(session)S.session=session;
 }));
-window.addEventListener('online',()=>{netbar();syncQueue();if(S.view==='nueva')render()});
+window.addEventListener('online',()=>{netbar();loadParams().catch(()=>{});syncQueue();if(S.view==='nueva')render()});
 window.addEventListener('offline',()=>{netbar();if(S.view==='nueva')render()});
 setInterval(()=>{syncQueue();if(S.view==='bandeja'&&!S.open&&navigator.onLine)countPend()},60000);
 if('serviceWorker' in navigator){

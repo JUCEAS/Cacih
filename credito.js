@@ -31,9 +31,9 @@ function personaBase(){return{n1:'',n2:'',a1:'',a2:'',conocido:'',clienteNo:'',l
   cuentas:'',cuentasList:[{inst:'',tipo:'',prom:''},{inst:'',tipo:'',prom:''},{inst:'',tipo:'',prom:''}],
   vehiculo:'',vehiculos:[{marca:'',tipo:'',placa:'',nombre:''},{marca:'',tipo:'',placa:'',nombre:''}],
   terrenos:'',terrenosDonde:'',otrosBienes:'',otrosDetalle:'',
-  selfie:'',dni1:'',dni2:'',firma:'',declara:false,compromiso:false,dniConfirm:false}}
+  selfie:'',dni1:'',dni2:'',firma:'',declara:false,compromiso:false,dniConfirm:false,dniVence:'',nacionalidad:'Hondureña',pep:'',pepCargo:'',gastosMes:''}}
 function cBlank(){return{client_id:uuid(),kind:'credito',oficina:'Oficina Principal, Juticalpa',asesor:S.perfil?.nombre||'',
-  cond:{monto:'',plazo:'',producto:'',tasa:'',tasaTipo:'Mensual',forma:'Mensual',metodo:'Cuota nivelada',formaOtra:'',garantia:'',clasif:'',destino:'',comision:'',seguro:'',servicios:'',pendiente:'',otros:''},
+  cond:{monto:'',plazo:'',producto:'',tipoCliente:'',tasa:'',tasaTipo:'Mensual',forma:'Mensual',metodo:'Cuota nivelada',formaOtra:'',garantia:'',clasif:'',destino:'',comision:'',seguro:'',servicios:'',pendiente:'',otros:''},
   cli:{...personaBase(),lat:null,lng:null,gpsPrec:null,ingresosDesc:'',pagoFuente:'',ingMes:'',gastosMes:'',deudasMes:'',refs:[{n:'',p:'',tel:''},{n:'',p:'',tel:''}],emergencia:{n:'',donde:'',tel:''}},
   garantiaDesc:'',nFiadores:1,fiadores:[personaBase(),personaBase()],autorizaBuro:false,consent:false}}
 function cCompletar(d){const b=cBlank();const m=(x,y)=>{for(const k in y){if(x[k]===undefined)x[k]=y[k];else if(y[k]&&typeof y[k]==='object'&&!Array.isArray(y[k])&&x[k]&&typeof x[k]==='object')m(x[k],y[k])}};m(d,b);return d}
@@ -42,7 +42,7 @@ let cSaveT;function cSave(){clearTimeout(cSaveT);cSaveT=setTimeout(()=>idb.set('
 /* ---------- cálculos ---------- */
 const num=v=>Number(String(v??'').replace(/,/g,''))||0;
 function cuotaEst(monto,plazo,tasa,tasaTipo,forma,metodo){
-  const P=num(monto),n0=num(plazo),t=num(tasa);if(!P||!n0)return 0;
+  const P=num(monto),n0=num(plazo),t=num(tasa);if(!P||!n0||tasa===''||tasa==null)return 0;
   const rm=tasaTipo==='Anual'?t/100/12:t/100,quin=forma==='Quincenal',n=quin?n0*2:n0,r=quin?rm/2:rm;
   if(metodo===METODOS[1])return P/n+P*r;
   return r>0?P*r/(1-Math.pow(1+r,-n)):P/n}
@@ -62,6 +62,11 @@ function cValidPersona(x,e,pre,esFiador){
   if(!x.nac)e[pre+'nac']='Indique la fecha de nacimiento.';else{const a=edad(x.nac);if(a<18||a>100)e[pre+'nac']='La persona debe ser mayor de edad.'}
   if(!x.lugarNac.trim())e[pre+'lugarNac']='Indique el lugar de nacimiento.';
   if(!x.civil)e[pre+'civil']='Seleccione el estado civil.';
+  if(!esFiador){if(esSocioCond(S.cdraft.cond)&&!String(x.clienteNo||'').trim())e[pre+'clienteNo']='Escriba el N° de cliente (código de socio).';
+    if(!x.dniVence)e[pre+'dniVence']='Indique el vencimiento de la identidad.';else if(new Date(x.dniVence+'T23:59')<new Date())e[pre+'dniVence']='La identidad está vencida. Debe renovarla antes de solicitar.';
+    if(!String(x.nacionalidad||'').trim())e[pre+'nacionalidad']='Indique la nacionalidad.';
+    if(!x.pep)e[pre+'pep']='Responda Sí o No.';else if(x.pep==='Sí'&&!String(x.pepCargo||'').trim())e[pre+'pep']='Indique el cargo público y el período.';}
+  else{if(!(num(x.sueldo)>0))e[pre+'sueldo']='Indique el sueldo o ingreso mensual del fiador.';if(String(x.gastosMes??'').trim()===''||num(x.gastosMes)<0)e[pre+'gastos']='Indique los gastos mensuales del fiador (0 si no tiene).';}
   if(enPareja(x)&&!x.conyuge.n.trim())e[pre+'conyuge']='Escriba el nombre del cónyuge.';
   if(esFiador){
     if(!x.direccion.trim()||!x.municipio.trim())e[pre+'dir']='Indique dirección y municipio.';
@@ -73,13 +78,13 @@ function cValidPersona(x,e,pre,esFiador){
 function cValidate(key){
   const c=S.cdraft,x=c.cli,e={};
   if(key==='cond'){const k=c.cond;
-    const pr=cProducto();if((S.params.productos||[]).length&&!pr)e.producto='Seleccione el producto de crédito.';
+    const pr=cProducto();if(hayTarifario()&&!pr)e.producto='Seleccione el tipo de préstamo.';
+    if(!k.tipoCliente)e.tipoCliente='Indique si es socio de CACIH.';
     if(!(num(k.monto)>0))e.monto='Indique el monto solicitado.';
     else if(pr&&num(pr.montoMax)>0&&num(k.monto)>num(pr.montoMax))e.monto=`El máximo para ${pr.nombre} es ${L(pr.montoMax)}.`;
     else if(pr&&num(pr.montoMin)>0&&num(k.monto)<num(pr.montoMin))e.monto=`El mínimo para ${pr.nombre} es ${L(pr.montoMin)}.`;
     if(pr&&num(pr.plazoMax)>0&&num(k.plazo)>num(pr.plazoMax))e.plazo=`El plazo máximo para ${pr.nombre} es ${pr.plazoMax} meses.`;
     if(!(num(k.plazo)>0)||num(k.plazo)>360)e.plazo='Indique el plazo en meses (1 a 360).';
-    if(k.tasa!==''&&!(num(k.tasa)>=0))e.tasa='Revise la tasa.';
     if(!k.forma)e.forma='Seleccione la forma de pago.';else if(k.forma==='Otra'&&!k.formaOtra.trim())e.formaOtra='Indique cuál.';
     if(!k.garantia)e.garantia='Seleccione el tipo de garantía.';
     if(!k.destino.trim())e.destino='Indique el destino del crédito.';
@@ -138,13 +143,15 @@ const cSiNo=(p,label,o={})=>cC(p,label,['Sí','No'],{req:1,rr:1,err:o.err||p.spl
 /* ---------- bloques reutilizables (cliente y fiador) ---------- */
 function bIdent(base,pre,esFiador){const x=gp(S.cdraft,base),a=edad(x.nac);return `
   ${cI(base+'.n1','1er nombre',{req:1})}${cI(base+'.n2','2do nombre')}${cI(base+'.a1','1er apellido',{req:1})}${cI(base+'.a2','2do apellido')}<div class="f full">${cErr(pre+'nom')}</div>
-  ${cI(base+'.conocido','Conocido como',{ph:'Opcional'})}${cI(base+'.clienteNo','N° de cliente',{mono:1,ph:'Si ya es socio/a'})}
+  ${cI(base+'.conocido','Conocido como',{ph:'Opcional'})}${cI(base+'.clienteNo','N° de cliente',{mono:1,req:!esFiador&&esSocioCond(S.cdraft.cond),ph:esFiador?'Si es socio/a':esSocioCond(S.cdraft.cond)?'Código de socio':'No aplica si no es socio',err:pre+'clienteNo'})}
   ${cI(base+'.lugarNac','Lugar de nacimiento',{req:1,err:pre+'lugarNac'})}${cI(base+'.nac','Fecha de nacimiento',{req:1,type:'date',rr:1,hint:a!=null&&a>=0?`Edad: ${a} años`:'',err:pre+'nac'})}
   ${cI(base+'.dni','N° de identidad',{req:1,mono:1,mode:'numeric',max:13,fmt:'dni',ph:'0000000000000',err:pre+'dni'})}<div class="f full" id="dck_${pid(base)}" style="margin:0">${dniCasilla(x.dni,x.nac,`data-cpk="${base}.dniConfirm"`,x.dniConfirm)}</div>${cI(base+'.rtn','RTN',{mono:1,mode:'numeric',max:14,fmt:'dig',ph:'Opcional'})}
+  ${esFiador?'':cI(base+'.dniVence','Vencimiento de la identidad',{req:1,type:'date',err:pre+'dniVence'})+cI(base+'.nacionalidad','Nacionalidad',{req:1,err:pre+'nacionalidad'})}
   ${cS(base+'.educ','Nivel educativo',EDUC)}
   ${cC(base+'.civil','Estado civil',CIVIL,{req:1,rr:1,err:pre+'civil'})}
   ${enPareja(x)?`${cI(base+'.conyuge.n','Nombre del cónyuge',{req:1,err:pre+'conyuge'})}${cI(base+'.conyuge.tel','Tel/cel del cónyuge',{mono:1,mode:'tel',max:9,fmt:'tel'})}${esFiador?'':cI(base+'.conyuge.trabajo','Fuente de trabajo del cónyuge')+cI(base+'.conyuge.sueldo','Sueldo del cónyuge (L)',{type:'number',mode:'decimal'})}`:''}
-  ${esFiador?cI(base+'.trabajo','Fuente de trabajo')+cI(base+'.sueldo','Sueldo (L)',{type:'number',mode:'decimal'}):''}`}
+  ${esFiador?cI(base+'.trabajo','Fuente de trabajo')+cI(base+'.sueldo','Sueldo o ingreso mensual (L)',{req:1,type:'number',mode:'decimal',err:pre+'sueldo'})+cI(base+'.gastosMes','Gastos mensuales (L)',{req:1,type:'number',mode:'decimal',err:pre+'gastos',hint:'Hogar y cuotas de otras deudas'}):''}
+  ${esFiador?'':cC(base+'.pep','¿Ocupa o ha ocupado en los últimos 4 años un cargo público (PEP), o es familiar cercano de alguien que lo ocupa?',['Sí','No'],{req:1,rr:1,err:pre+'pep'})+(x.pep==='Sí'?cI(base+'.pepCargo','Cargo, institución y período',{req:1,full:1}):'')}`}
 function bLoc(base,pre,esFiador){const x=gp(S.cdraft,base);return `
   ${esFiador?cI(base+'.direccion','Dirección de residencia',{req:1,full:1,err:pre+'dir'})+cI(base+'.ciudad','Ciudad'):''}
   ${cI(base+'.municipio','Municipio',{req:1,err:esFiador?'':'municipio'})}${esFiador?`<div class="f"><label class="t" for="${pid(base+'.depto')}">Departamento</label><select id="${pid(base+'.depto')}" data-cp="${base}.depto">${DEPTOS.map(d=>`<option ${x.depto===d?'selected':''}>${d}</option>`).join('')}</select></div>`:cI(base+'.barrio','Barrio o colonia',{req:1,err:'barrio'})+cI(base+'.refUbic','Referencia de ubicación',{req:1,full:1,ph:'Cómo llegar: puntos de referencia, color de casa',err:'refUbic'})}
@@ -167,9 +174,10 @@ function vCredito(){
   const key=st[S.cstep][0],k=c.cond,x=c.cli;let body='';
   if(key==='cond'){const cu=cuotaEst(k.monto,k.plazo,k.tasa,k.tasaTipo,k.forma,k.metodo),neto=num(k.monto)-deducciones(k);body=`<div class="grid">
     ${cI('oficina','Oficina que gestiona el crédito')}${cI('asesor','Asesor')}
-    ${(S.params.productos||[]).length?`<div class="f full"><label class="t" for="crProd">Producto de crédito <i>*</i></label><select id="crProd" data-cprod="1"><option value=""></option>${S.params.productos.map(p=>`<option ${k.producto===p.nombre?'selected':''}>${esc(p.nombre)}</option>`).join('')}</select>${cProducto()?`<span class="hint">${esc(prodResumen(cProducto()))}</span>`:''}${cErr('producto')}</div>`:''}
+    ${hayTarifario()?`<div class="f full"><label class="t" for="crProd">Tipo de préstamo <i>*</i></label><select id="crProd" data-cprod="1"><option value=""></option>${prodVigentes().map(p=>`<option ${k.producto===p.nombre?'selected':''}>${esc(p.nombre)}</option>`).join('')}</select>${cProducto()?`<span class="hint">${esc(prodResumen(cProducto()))}</span>`:''}${cErr('producto')}</div>`:`<div class="f full warnnote">La oficina todavía no ha definido el tarifario de tasas. La solicitud se puede registrar; la tasa y la cuota las fija la oficina.</div>`}
+    ${cC('cond.tipoCliente','Tipo de cliente',['Socio de CACIH','No socio'],{req:1,rr:1,err:'tipoCliente'})}
     ${cI('cond.monto','Monto solicitado (L)',{req:1,type:'number',mode:'decimal',rr:1,err:'monto'})}${cI('cond.plazo','Plazo (meses)',{req:1,type:'number',mode:'numeric',rr:1,err:'plazo'})}
-    ${cProducto()?`<div class="f"><span class="t">Tasa (%)</span><b style="padding:10px 0">${esc(k.tasa)} % ${esc(k.tasaTipo.toLowerCase())}</b><span class="hint">Fijada por el producto</span></div>`:cI('cond.tasa','Tasa (%)',{type:'number',mode:'decimal',rr:1,ph:'Si ya se conoce',err:'tasa'})}${cProducto()?'':cC('cond.tasaTipo','La tasa es',['Mensual','Anual'],{rr:1,full:false})}
+    <div class="f"><span class="t">Tasa de interés</span><b class="tasafija">${k.tasa!==''?`${esc(k.tasa)} % ${esc(k.tasaTipo.toLowerCase())}`:'—'}</b><span class="hint">${cProducto()?(tasaDe(cProducto(),esSocioCond(k)).pref?'Tasa preferencial para socios · ':'')+'Fijada por el tarifario de la oficina':'Se asigna al elegir tipo de préstamo y cliente'}</span></div>
     ${cC('cond.forma','Forma de pago',['Mensual','Quincenal','Otra'],{req:1,rr:1,err:'forma'})}${k.forma==='Otra'?cI('cond.formaOtra','¿Cuál?',{req:1,err:'formaOtra'}):''}${cC('cond.metodo','Método de cálculo',METODOS,{rr:1})}
     ${cC('cond.garantia','Garantía',GARANTIAS,{req:1,rr:1,err:'garantia'})}
     ${cS('cond.clasif','Clasificación de crédito',['Consumo','Comercial','Agropecuario','Vivienda','Microcrédito'])}${cI('cond.destino','Destino del crédito',{req:1,full:1,ph:'Ej. compra de insumos para siembra de maíz',err:'destino'})}
@@ -193,7 +201,7 @@ function vCredito(){
   ${progreso(S.cstep,st.length)}
   <div class="steps">${st.map((s,i)=>`<button data-cgo="${i}" class="${i===S.cstep?'cur':''} ${i<S.cstep?'done':''}"><span class="l">${i+1}</span>${s[1]}</button>`).join('')}</div>
   <div class="card"><h2 style="margin-bottom:14px"><span class="hint" style="font-family:var(--f-body);font-weight:600">Paso ${S.cstep+1} de ${st.length} · </span>${st[S.cstep][1]}</h2>${body}
-  <div class="rowbtns navfija"><button id="crPrev" ${S.cstep===0?'disabled':''}>Atrás</button>${key!=='rev'?`<button class="btn-primary" id="crNext">Siguiente</button>`:`<button class="btn-primary" id="crSend" ${cFirstInvalid()>=0?'disabled':''}>${navigator.onLine?'Enviar al comité':'Guardar para enviar'}</button>`}</div></div>
+  <div class="rowbtns navfija"><button id="crPrev" ${S.cstep===0?'disabled':''}>Atrás</button>${key!=='rev'?`<button class="btn-primary" id="crNext">Siguiente</button>`:(S.practica?`<button id="crSend" ${cFirstInvalid()>=0?'disabled':''}>Terminar práctica (no se envía)</button><button class="btn-primary" id="crReal" ${cFirstInvalid()>=0?'disabled':''}>Es un cliente real: enviar</button>`:`<button class="btn-primary" id="crSend" ${cFirstInvalid()>=0?'disabled':''}>${navigator.onLine?'Enviar al comité':'Guardar para enviar'}</button>`)}</div></div>
   <p style="margin-top:14px"><button id="crReset" class="btn-bad btn-sm">Descartar borrador</button></p>`}
 
 /* ---------- envío ---------- */
@@ -206,12 +214,13 @@ function cRow(d,paths){const k=d.cond,x=d.cli,cu=cuotaEst(k.monto,k.plazo,k.tasa
     fiadores:conFiador(d)?d.fiadores.slice(0,d.nFiadores).map((f,i)=>({...cLimpio(f),docs:paths['f'+i]||{}})):[],
     documentos:paths.cli||{},autoriza_buro:!!d.autorizaBuro,consentimiento_datos:!!d.consent}}
 async function cUpload(item){
+  try{await loadParams()}catch(e){}aplicarTarifa(item.d.cond);
   const d=item.d,base=S.session.user.id+'/'+d.client_id+'/',paths={cli:{}};
   const sube=async(dataUrl,file)=>{const{error}=await sb.storage.from('documentos').upload(base+file,dataURLtoBlob(dataUrl),{contentType:'image/jpeg',upsert:false});if(error&&!/exists|Duplicate/i.test(error.message))throw error;return base+file};
   for(const k of['selfie','dni1','dni2','firma'])if(d.cli[k])paths.cli[k]=await sube(d.cli[k],'solicitante-'+k+'.jpg');
   if(conFiador(d))for(let i=0;i<d.nFiadores;i++){paths['f'+i]={};for(const k of['selfie','dni1','dni2','firma'])if(d.fiadores[i][k])paths['f'+i][k]=await sube(d.fiadores[i][k],`fiador${i+1}-${k}.jpg`)}
   const{data,error}=await sb.from('creditos').insert(cRow(d,paths)).select('folio').single();
-  if(error){if(/client_id/.test(error.message))return{folio:'(ya enviada)'};if(/creditos_dni_pendiente|duplicate key/i.test(error.message))throw new Error('Esta persona ya tiene una solicitud de crédito pendiente en la oficina. Descarte esta o pida a la oficina que resuelva la anterior.');throw error}
+  if(error){if(/client_id/.test(error.message))return{folio:'(ya enviada)'};if(/tarifa_invalida/.test(error.message))throw new Error(error.message.replace(/^.*tarifa_invalida:\s*/,''));if(/creditos_dni_pendiente|duplicate key/i.test(error.message))throw new Error('Esta persona ya tiene una solicitud de crédito pendiente en la oficina. Descarte esta o pida a la oficina que resuelva la anterior.');throw error}
   return data}
 async function cEnviar(){
   if(S.practica){const d=S.cdraft;S.csent={nombre:nombreDe(d.cli),monto:num(d.cond.monto),folio:'PRÁCTICA',online:true,practica:true};S.cdraft=cBlank();await idb.set('cdraft',S.cdraft);S.cstep=0;render();return}
@@ -240,8 +249,8 @@ async function loadCredDetail(id){
   const[{data:log},{data:soc},{data:otros}]=await Promise.all([sb.from('bitacora').select('accion,detalle,creado_en').eq('credito_id',id).order('creado_en'),
     sb.from('solicitudes').select('folio,estado,codigo_socio,tipo_cuenta,creado_en,revisado_en').eq('dni',s.dni).order('creado_en',{ascending:false}).limit(5),
     sb.from('creditos').select('id,folio,estado,monto_solicitado,creado_en,resolucion').eq('dni',s.dni).neq('id',id).order('creado_en',{ascending:false}).limit(10)]);
-  const fdni=(s.fiadores||[]).map(f=>f.dni).filter(Boolean);let comoFiador=[];if(fdni.length||s.dni){const{data:cf}=await sb.from('creditos').select('folio,estado,nombres,apellidos,fiadores').neq('id',id).limit(500);comoFiador=(cf||[]).filter(c=>(c.fiadores||[]).some(f=>f.dni===s.dni))}
-  S.cdetail={s,urls,log:log||[],soc:soc||[],otros:otros||[],comoFiador};S.cana=JSON.parse(JSON.stringify(s.analisis||{lista:{},nota:''}));if(!S.cana.lista)S.cana.lista={};S.cres={decision:'',monto:s.monto_solicitado,plazo:s.plazo_meses,tasa:s.datos?.cond?.tasa||'',tasaTipo:s.datos?.cond?.tasaTipo||'Mensual',forma:s.datos?.cond?.forma||'Mensual',metodo:s.datos?.cond?.metodo||'Cuota nivelada',observaciones:''};render()}
+  const{data:rel}=await sb.rpc('relacion_fiadores',{p_id:id});
+  S.cdetail={s,urls,log:log||[],soc:soc||[],otros:otros||[],rel:rel||{solicitante_es_fiador:[],fiadores:[]}};S.cana=JSON.parse(JSON.stringify(s.analisis||{lista:{},nota:''}));if(!S.cana.lista)S.cana.lista={};S.cres={decision:'',monto:s.monto_solicitado,plazo:s.plazo_meses,tasa:s.datos?.cond?.tasa||'',tasaTipo:s.datos?.cond?.tasaTipo||'Mensual',forma:s.datos?.cond?.forma||'Mensual',metodo:s.datos?.cond?.metodo||'Cuota nivelada',observaciones:''};render()}
 const pillC=(e,an)=>e==='Pendiente'&&an?`<span class="pill p-an">En análisis</span>`:`<span class="pill ${e==='Pendiente'?'p-pend':e==='Aprobado'?'p-ok':'p-bad'}">${esc(e)}</span>`;
 function vBandejaTipo(){return `<div class="filters" style="margin:4px 0 14px"><button data-btipo="afil" class="${S.btipo!=='creditos'?'on':''}">Afiliaciones</button><button data-btipo="creditos" class="${S.btipo==='creditos'?'on':''}">Créditos${S.cpend?` <span class="badge">${S.cpend}</span>`:''}</button></div>`}
 function vBandejaCreditos(){
@@ -263,6 +272,7 @@ function vCredDetalle(){
   ${s.estado==='Pendiente'?`<div class="card" style="margin-top:14px"><h3>Resolución del comité de crédito</h3><div class="grid" style="margin-top:10px">
     <div class="f full"><span class="t">Decisión</span><div class="chips">${['Aprobado','Denegado'].map((d,i)=>`<label><input type="radio" name="crDec" id="crDec${i}" data-cres="decision" value="${d}" ${r.decision===d?'checked':''}>${d==='Aprobado'?'Aprobar':'Denegar'}</label>`).join('')}</div></div>
     ${r.decision==='Aprobado'?`<div class="f"><label class="t" for="crMonto">Monto aprobado (L)</label><input id="crMonto" type="number" inputmode="decimal" data-cres="monto" value="${esc(r.monto)}"></div><div class="f"><label class="t" for="crPlazo">Plazo (meses)</label><input id="crPlazo" type="number" inputmode="numeric" data-cres="plazo" value="${esc(r.plazo)}"></div><div class="f"><label class="t" for="crTasa">Tasa (%)</label><input id="crTasa" type="number" inputmode="decimal" data-cres="tasa" value="${esc(r.tasa)}"></div><div class="f"><label class="t" for="crTasaT">La tasa es</label><select id="crTasaT" data-cres="tasaTipo">${['Mensual','Anual'].map(o=>`<option ${r.tasaTipo===o?'selected':''}>${o}</option>`).join('')}</select></div><div class="f"><label class="t" for="crForma">Forma de pago</label><select id="crForma" data-cres="forma">${['Mensual','Quincenal','Otra'].map(o=>`<option ${r.forma===o?'selected':''}>${o}</option>`).join('')}</select></div><div class="f"><label class="t" for="crMet">Método</label><select id="crMet" data-cres="metodo">${METODOS.map(o=>`<option ${r.metodo===o?'selected':''}>${o}</option>`).join('')}</select></div><div class="f"><span class="t">Cuota a pagar</span><b class="num" id="crCuota" style="padding:10px 0">${cu?L(cu):'—'}</b></div>`:''}
+    <div class="f"><label class="t" for="crActa">N° de acta del comité <i>*</i></label><input id="crActa" data-cres="acta" value="${esc(r.acta||'')}"></div><div class="f"><label class="t" for="crPres">Miembros presentes</label><input id="crPres" data-cres="presentes" value="${esc(r.presentes||'')}" placeholder="Nombres de quienes firman"></div>
     <div class="f full"><label class="t" for="crObs">Observaciones${r.decision==='Denegado'?' <i>*</i>':''}</label><textarea id="crObs" rows="2" data-cres="observaciones">${esc(r.observaciones)}</textarea></div></div>
     <div class="rowbtns"><span class="err" id="crErr"></span><button class="btn-primary" id="crResolver" ${r.decision?'':'disabled'}>Registrar resolución</button></div></div>`:''}
   <div class="card" style="margin-top:14px"><div class="rowbtns" style="margin-top:0"><h3>Documentos</h3><div class="grp" style="display:flex;gap:8px;flex-wrap:wrap"><button id="crPlan">Plan de pagos</button><button id="crPdf">Descargar PDF</button><button class="btn-primary" id="crPrint">Imprimir</button></div></div>
@@ -280,8 +290,8 @@ function tPersona(x,esFiador,urls){const v=y=>esc(y??''),r2=(a,b,c,d)=>`<tr><td 
   const tab=(cols,rows)=>`<table class="grid3"><tr>${cols.map(c=>`<td class="k">${c}</td>`).join('')}</tr>${rows.length?rows.map(r=>`<tr>${r.map(c=>`<td>${v(c)}</td>`).join('')}</tr>`).join(''):`<tr>${cols.map(()=>'<td>&nbsp;</td>').join('')}</tr>`}</table>`;
   return `<h4>${esFiador?'Datos del fiador solidario':'Datos de identificación del cliente'}</h4><table class="kv">
   ${r2('1er nombre',x.n1,'2do nombre',x.n2)}${r2('1er apellido',x.a1,'2do apellido',x.a2)}${r2('Conocido como',x.conocido,'N° de cliente',x.clienteNo)}
-  ${r2('Lugar y fecha de nacimiento',[x.lugarNac,fn].filter(Boolean).join(' · '),'Edad',a!=null?a+' años':'')}${r2('N° de identidad',fmtDni(x.dni),'RTN',x.rtn)}${r2('Nivel educativo',x.educ,'Estado civil',x.civil)}
-  ${enPareja(x)?r2('Nombre del cónyuge',x.conyuge?.n,'Tel/cel',x.conyuge?.tel):''}${!esFiador&&enPareja(x)?r2('Fuente de trabajo del cónyuge',x.conyuge?.trabajo,'Sueldo',x.conyuge?.sueldo?L(x.conyuge.sueldo):''):''}${esFiador?r2('Fuente de trabajo',x.trabajo,'Sueldo',x.sueldo?L(x.sueldo):''):''}</table>
+  ${r2('Lugar y fecha de nacimiento',[x.lugarNac,fn].filter(Boolean).join(' · '),'Edad',a!=null?a+' años':'')}${r2('N° de identidad',fmtDni(x.dni),'RTN',x.rtn)}${!esFiador&&(x.dniVence||x.pep)?r2('Vence identidad · nacionalidad',[x.dniVence?x.dniVence.split('-').reverse().join('/'):'',x.nacionalidad].filter(Boolean).join(' · '),'PEP',x.pep==='Sí'?'Sí · '+(x.pepCargo||''):x.pep):''}${r2('Nivel educativo',x.educ,'Estado civil',x.civil)}
+  ${enPareja(x)?r2('Nombre del cónyuge',x.conyuge?.n,'Tel/cel',x.conyuge?.tel):''}${!esFiador&&enPareja(x)?r2('Fuente de trabajo del cónyuge',x.conyuge?.trabajo,'Sueldo',x.conyuge?.sueldo?L(x.conyuge.sueldo):''):''}${esFiador?r2('Fuente de trabajo',x.trabajo,'Sueldo · gastos (mes)',[x.sueldo?L(x.sueldo):'',x.gastosMes!==undefined&&x.gastosMes!==''?L(x.gastosMes):''].filter(Boolean).join(' · ')):''}</table>
   <h4>Datos de localización${esFiador?'':' del cliente'}</h4><table class="kv">
   ${esFiador?r1('Dirección de residencia',x.direccion)+r2('Ciudad',x.ciudad,'Municipio / departamento',[x.municipio,x.depto].filter(Boolean).join(', ')):r2('Municipio',x.municipio,'Barrio o colonia',x.barrio)+r1('Referencia de ubicación',x.refUbic)+r1('GPS',x.lat!=null?Number(x.lat).toFixed(6)+', '+Number(x.lng).toFixed(6):'')}
   ${r2('E-mail',x.email,'Tel/cel 1 · 2',[x.cel1,x.cel2].filter(Boolean).join(' · '))}${r2('El lugar donde vive es',x.vivienda,'Tiempo de residir',x.tiempoRes?x.tiempoRes+' meses':'')}${x.vivienda&&x.vivienda!=='Casa propia'?r2('Propietario de la vivienda',x.propietario?.n,'Cel.',x.propietario?.cel):''}</table>
@@ -299,7 +309,7 @@ function creditoHTML(s,urls){
   const img=(path,alt)=>path&&urls[path]?`<img src="${urls[path]}" crossorigin="anonymous" alt="${alt}">`:'';
   const r2=(a,b,c,e)=>`<tr><td class="k">${a}</td><td>${v(b)}</td><td class="k">${c}</td><td>${v(e)}</td></tr>`;
   return `<div class="sheet">${cHead(p,'SOLICITUD DE CRÉDITO Nº <span class="mono">'+v(s.folio)+'</span>',img(s.documentos?.selfie,'Foto del solicitante'))}
-  <table class="kv">${r2('Oficina que gestiona el crédito',d.oficina,'Fecha de presentada',fecha(s.creado_en))}${r2('Asesor',d.asesor||s.promotor_nombre,'Estado',s.estado)}</table>
+  <table class="kv">${r2('Tipo de préstamo',k.producto||'','Tipo de cliente',k.tipoCliente||'')}${r2('Oficina que gestiona el crédito',d.oficina,'Fecha de presentada',fecha(s.creado_en))}${r2('Asesor',d.asesor||s.promotor_nombre,'Estado',s.estado)}</table>
   <h4>Condiciones de crédito</h4><table class="kv">
   ${r2('Monto',L(s.monto_solicitado),'Plazo',s.plazo_meses+' meses')}${r2('Tasa',k.tasa!==''&&k.tasa!=null?k.tasa+' % '+(k.tasaTipo||'').toLowerCase():'','Garantía',k.garantia)}
   ${r2('Cuota a pagar',k.cuota?L(k.cuota):'','Forma de pago',k.forma==='Otra'?'Otra: '+(k.formaOtra||''):k.forma)}${r2('Clasificación de crédito',k.clasif,'Destino del crédito',k.destino)}
@@ -310,9 +320,9 @@ function creditoHTML(s,urls){
   <h4>Datos de la garantía</h4><p class="q"><b>${v(k.garantia)}</b>${d.garantiaDesc?' · '+v(d.garantiaDesc):''}${(s.fiadores||[]).length?' · Fiador(es) solidario(s): '+s.fiadores.map(f=>v(nombreDe(f))+' ('+v(fmtDni(f.dni))+')').join('; '):''}</p>
   <h4>Autorización</h4><p class="legal">Yo, <b>${v(nombreDe(x))}</b>, con número de identidad <b>${v(fmtDni(x.dni))}</b>. ${CTXT.buro(p.nombre_legal)}</p>
   <div class="sigs"><div></div><div>${img(s.documentos?.firma,'Firma del solicitante')}<span>Firma y huella del solicitante</span></div><div></div></div>
-  ${s.analisis?`<h4>Análisis de crédito</h4><p class="legal">${ANALISIS.map(([k,t])=>(s.analisis.lista?.[k]?'☒ ':'☐ ')+t).join(' &nbsp; ')}${s.datos?.capacidad?.relacion!=null?' &nbsp;·&nbsp; Cuota / disponible: <b>'+s.datos.capacidad.relacion+' %</b>':''}${s.analisis.nota?'<br>Nota: '+v(s.analisis.nota):''}</p>`:''}
+  ${s.analisis?`<h4>Análisis de crédito</h4><p class="legal">${ANALISIS.map(([k,t])=>(s.analisis.lista?.[k]?'☒ ':'☐ ')+t).join(' &nbsp; ')}${(()=>{const cc=capacidad(x,cuotaEst(s.monto_solicitado,s.plazo_meses,k.tasa,k.tasaTipo,k.forma,k.metodo),k.forma);return cc.relacion!=null?' &nbsp;·&nbsp; Cuota / disponible: <b>'+cc.relacion+' %</b>':''})()}${s.analisis.nota?'<br>Nota: '+v(s.analisis.nota):''}</p>`:''}
   <h4>Datos de resolución de aprobación</h4><p class="legal">El suscrito comité de crédito de la CACIH, después de haber evaluado y analizado la presente solicitud de crédito, decidimos: <b>${res?(res.decision==='Aprobado'?'APROBAR':'DENEGAR'):'________________'}</b> la presente solicitud, bajo las siguientes condiciones:</p>
-  <table class="kv">${r2('Monto aprobado',res?.monto?L(res.monto):'','Plazo',res?.plazo?res.plazo+' meses':'')}${r2('Tasa',res?.tasa!==undefined&&res?.tasa!==''?res.tasa+' % '+String(res.tasaTipo||'').toLowerCase():'','Cuota a pagar',res?.cuota?L(res.cuota):'')}${r2('Forma de pago',res?.forma,'Fecha de resolución',s.revisado_en?fecha(s.revisado_en):'')}<tr><td class="k">Observaciones</td><td colspan="3">${v(res?.observaciones)}</td></tr></table>
+  <table class="kv">${r2('Monto aprobado',res?.monto?L(res.monto):'','Plazo',res?.plazo?res.plazo+' meses':'')}${r2('Tasa',res?.tasa!==undefined&&res?.tasa!==''?res.tasa+' % '+String(res.tasaTipo||'').toLowerCase():'','Cuota a pagar',res?.cuota?L(res.cuota):'')}${r2('Forma de pago',res?.forma,'Fecha de resolución',s.revisado_en?fecha(s.revisado_en):'')}${r2('N° de acta del comité',res?.acta,'Miembros presentes',res?.presentes)}<tr><td class="k">Observaciones</td><td colspan="3">${v(res?.observaciones)}</td></tr></table>
   <div class="sigs"><div><span>Firma autorizada</span></div><div><span>Firma autorizada</span></div><div><span>Firma autorizada</span></div></div>
   <div class="foot"><span>SC-01 v1.5 · Solicitud de crédito CACIH</span><span>Impreso ${fechaHora(new Date())}</span></div></div>`}
 function fiadorHTML(s,f,i,urls){
@@ -349,7 +359,7 @@ async function cExcel(btn){
       'Folio':s.folio,'Estado':s.estado,'Fecha':new Date(s.creado_en),'Asesor':s.datos?.asesor||s.promotor_nombre,'N° de cliente':s.cliente_no||'',
       'Nombre':nombreDe(x)||s.nombres+' '+s.apellidos,'Identidad':fmtDni(s.dni),'RTN':x.rtn||'','Edad':edad(x.nac),'Estado civil':x.civil||'','Municipio':x.municipio||'','Barrio o colonia':x.barrio||'','Celular':x.cel1||'',
       'Monto solicitado (L)':Number(s.monto_solicitado),'Plazo (meses)':s.plazo_meses,'Tasa':k.tasa?k.tasa+' % '+k.tasaTipo:'','Forma de pago':k.forma||'','Cuota estimada (L)':k.cuota||'','Destino':k.destino||'','Clasificación':k.clasif||'','Garantía':k.garantia||'','Datos de garantía':s.datos?.garantiaDesc||'','Valor a recibir (L)':k.valorRecibir??'',
-      'Producto':k.producto||'','Ingresos mes (L)':x.ingMes?Number(x.ingMes):'','Gastos mes (L)':x.gastosMes!==undefined&&x.gastosMes!==''?Number(x.gastosMes):'','Otras deudas mes (L)':x.deudasMes?Number(x.deudasMes):'','Cuota / disponible (%)':s.datos?.capacidad?.relacion??'','En análisis':s.analizado_en?'Sí':'','Negocio o patrono':x.patronos?.[0]?.nombre||'','Recibe remesas':x.remesas||'','Fiador 1':f[0]?nombreDe(f[0])+' ('+fmtDni(f[0].dni)+')':'','Fiador 2':f[1]?nombreDe(f[1])+' ('+fmtDni(f[1].dni)+')':'',
+      'Producto':k.producto||'','Ingresos mes (L)':x.ingMes?Number(x.ingMes):'','Gastos mes (L)':x.gastosMes!==undefined&&x.gastosMes!==''?Number(x.gastosMes):'','Otras deudas mes (L)':x.deudasMes?Number(x.deudasMes):'','Tipo de cliente':k.tipoCliente||'','PEP':x.pep||'','Cuota / disponible (%)':capacidad(x,cuotaEst(s.monto_solicitado,s.plazo_meses,k.tasa,k.tasaTipo,k.forma,k.metodo),k.forma).relacion??'','Acta':r.acta||'','En análisis':s.analizado_en?'Sí':'','Negocio o patrono':x.patronos?.[0]?.nombre||'','Recibe remesas':x.remesas||'','Fiador 1':f[0]?nombreDe(f[0])+' ('+fmtDni(f[0].dni)+')':'','Fiador 2':f[1]?nombreDe(f[1])+' ('+fmtDni(f[1].dni)+')':'',
       'Decisión':r.decision||'','Monto aprobado (L)':r.monto?Number(r.monto):'','Plazo aprobado':r.plazo||'','Tasa aprobada':r.tasa?r.tasa+' % '+(r.tasaTipo||''):'','Cuota aprobada (L)':r.cuota||'','Observaciones':r.observaciones||'','Fecha de resolución':s.revisado_en?new Date(s.revisado_en):''}});
     const ws=XLSX.utils.json_to_sheet(data,{cellDates:true,dateNF:'dd/mm/yyyy'}),keys=Object.keys(data[0]);
     ws['!cols']=keys.map(k=>({wch:Math.min(40,Math.max(k.length+2,...data.slice(0,200).map(r=>String(r[k]??'').length+1)))}));
@@ -370,7 +380,7 @@ function cInitSigs(){document.querySelectorAll('canvas[data-csig]').forEach(c=>{
 
 /* ---------- navegación ---------- */
 function cGo(i){S.cstep=i;S.cerrors={};render();window.scrollTo({top:0})}
-function cAbrir(){if(!S.cdraft)S.cdraft=cBlank();if(!S.cdraft.asesor)S.cdraft.asesor=S.perfil?.nombre||''}
+function cAbrir(){if(!S.cdraft)S.cdraft=cBlank();if(!S.cdraft.asesor)S.cdraft.asesor=S.perfil?.nombre||'';aplicarTarifa(S.cdraft.cond)}
 
 /* ---------- eventos ---------- */
 document.addEventListener('click',async e=>{
@@ -380,6 +390,7 @@ document.addEventListener('click',async e=>{
   if(t.id==='crNext'){const key=cSteps()[S.cstep][0],er=cValidate(key);if(Object.keys(er).length){S.cerrors=er;render();toast('Revise los campos marcados')}else cGo(S.cstep+1)}
   if(t.id==='crGoBad')cGo(cFirstInvalid());
   if(t.id==='crSend'){t.disabled=true;await cEnviar()}
+  if(t.id==='crReal'){t.disabled=true;salirPractica();await cEnviar()}
   if(t.id==='crNew'){S.csent=null;render()}
   if(t.id==='crGoEnvios')setView('envios');
   if(t.id==='crReset'){if(!t.dataset.sure){t.dataset.sure='1';t.textContent='Toque otra vez para descartar';setTimeout(()=>{t.textContent='Descartar borrador';delete t.dataset.sure},4000);return}S.cdraft=cBlank();S.cstep=0;S.cerrors={};await idb.set('cdraft',S.cdraft);render();toast('Borrador descartado')}
@@ -396,9 +407,10 @@ document.addEventListener('click',async e=>{
     const pr=$('#print');pr.innerHTML=[creditoHTML(s,urls),...(s.fiadores||[]).map((f,i)=>fiadorHTML(s,f,i,urls))].join('<div style="break-after:page"></div>');
     await Promise.all([...pr.querySelectorAll('img')].map(i=>i.complete?0:new Promise(r=>{i.onload=i.onerror=r})));window.print()}
   if(t.id==='crResolver'){const r=S.cres,er=$('#crErr');er.textContent='';
+    if(!String(r.acta||'').trim()){er.textContent='Escriba el número de acta del comité.';return}
     if(r.decision==='Aprobado'&&!(num(r.monto)>0)){er.textContent='Indique el monto aprobado.';return}
     if(r.decision==='Denegado'&&!r.observaciones.trim()){er.textContent='Escriba el motivo en observaciones.';return}
-    const res=r.decision==='Aprobado'?{monto:num(r.monto),plazo:num(r.plazo),tasa:r.tasa,tasaTipo:r.tasaTipo,forma:r.forma,metodo:r.metodo,cuota:Math.round(cuotaEst(r.monto,r.plazo,r.tasa,r.tasaTipo,r.forma,r.metodo)*100)/100,observaciones:r.observaciones.trim()}:{observaciones:r.observaciones.trim()};
+    const res=r.decision==='Aprobado'?{monto:num(r.monto),plazo:num(r.plazo),tasa:r.tasa,tasaTipo:r.tasaTipo,forma:r.forma,metodo:r.metodo,cuota:Math.round(cuotaEst(r.monto,r.plazo,r.tasa,r.tasaTipo,r.forma,r.metodo)*100)/100,observaciones:r.observaciones.trim()}:{observaciones:r.observaciones.trim()};res.acta=String(r.acta).trim();res.presentes=String(r.presentes||'').trim();
     t.disabled=true;const{error}=await sb.rpc('resolver_credito',{p_id:S.copen,p_decision:r.decision,p_resolucion:res});
     if(error){er.textContent=errMsg(error);t.disabled=false;return}toast(r.decision==='Aprobado'?'Crédito aprobado':'Crédito denegado');loadCredDetail(S.copen);if(typeof countPend==='function')countPend()}
 });
@@ -412,7 +424,7 @@ document.addEventListener('input',e=>{const el=e.target;
 document.addEventListener('change',e=>{const el=e.target;
   if(el.dataset.cres&&S.cres){S.cres[el.dataset.cres]=el.value;if(el.dataset.cres==='decision'){render()}else{const r=S.cres,b=$('#crCuota');if(b){const cu=cuotaEst(r.monto,r.plazo,r.tasa,r.tasaTipo,r.forma,r.metodo);b.textContent=cu?L(cu):'—'}}return}
   if(!S.cdraft)return;
-  if(el.dataset.cp&&el.type==='radio'){let v=el.value;if(el.dataset.cp==='nFiadores')v=Number(v);sp(S.cdraft,el.dataset.cp,v);cSave();if(el.dataset.rr)render();return}
+  if(el.dataset.cp&&el.type==='radio'){let v=el.value;if(el.dataset.cp==='nFiadores')v=Number(v);sp(S.cdraft,el.dataset.cp,v);if(el.dataset.cp==='cond.tipoCliente')aplicarTarifa(S.cdraft.cond);cSave();if(el.dataset.rr)render();return}
   if(el.dataset.cp&&el.tagName==='SELECT'){sp(S.cdraft,el.dataset.cp,el.value);cSave()}
   if(el.dataset.cp&&el.dataset.rr&&el.type!=='radio'&&el.type!=='checkbox'&&!/^cond\./.test(el.dataset.cp))render();
   if(el.dataset.cp&&el.dataset.rr&&/^cond\.(monto|plazo)$/.test(el.dataset.cp)&&cProducto())render();
@@ -428,10 +440,10 @@ function sumarPeriodo(iso,i,quin){const[y,m,d]=iso.split('-').map(Number);
   if(quin){const t=new Date(y,m-1,d+15*i);return t}
   const t=new Date(y,m-1+i,1),ult=new Date(t.getFullYear(),t.getMonth()+1,0).getDate();t.setDate(Math.min(d,ult));return t}
 function simBlank(){const d=new Date();d.setMonth(d.getMonth()+1);d.setMinutes(d.getMinutes()-d.getTimezoneOffset());
-  return{producto:'',monto:'',plazo:'12',tasa:'',tasaTipo:'Mensual',forma:'Mensual',metodo:'Cuota nivelada',inicio:d.toISOString().slice(0,10),ingreso:'',nombre:'',celular:'',comision:'',seguro:''}}
+  return{producto:'',tipoCliente:'No socio',monto:'',plazo:'12',tasa:'',tasaTipo:'Mensual',forma:'Mensual',metodo:'Cuota nivelada',inicio:d.toISOString().slice(0,10),ingreso:'',nombre:'',celular:'',comision:'',seguro:''}}
 /* Genera el plan. Redondea a centavos y ajusta la última cuota para cerrar en cero. */
 function planPagos(m){
-  const P=num(m.monto),n0=Math.round(num(m.plazo)),t=num(m.tasa);if(!(P>0)||!(n0>0)||n0>360)return null;
+  const P=num(m.monto),n0=Math.round(num(m.plazo)),t=num(m.tasa);if(!(P>0)||!(n0>0)||n0>360||m.tasa===''||m.tasa==null)return null;
   const quin=m.forma==='Quincenal',n=quin?n0*2:n0,rm=m.tasaTipo==='Anual'?t/100/12:t/100,r=quin?rm/2:rm;
   const r2=x=>Math.round(x*100)/100,fija=r>0?P*r/(1-Math.pow(1+r,-n)):P/n,cap0=P/n;
   let saldo=P,ti=0;const filas=[];
@@ -469,13 +481,13 @@ function vSimResultado(){
     ${p.filas.map(f=>`<tr><td>${f.i}</td><td>${fCorta(f.fecha)}</td><td class="num">${L(f.cuota)}</td><td class="num">${L(f.int)}</td><td class="num">${L(f.cap)}</td><td class="num">${L(f.saldo)}</td></tr>`).join('')}
     <tr class="tot"><td colspan="2">Totales</td><td class="num">${L(p.total)}</td><td class="num">${L(p.ti)}</td><td class="num">${L(p.P)}</td><td></td></tr></tbody></table></div>
     <p class="hint">Cálculo estimado sobre saldos (interés solo sobre lo que se debe). No incluye comisión, seguro ni otros cargos. La cuota definitiva la fija el comité de crédito.</p></div>`}
-function vSimulador(){if(!S.sim)S.sim=simBlank();
+function vSimulador(){if(!S.sim)S.sim=simBlank();if(!isOficina()&&!simProducto())S.sim.tasa='';
   return `<h1>Simulador de préstamo</h1><p class="lead">Muestre al cliente cuánto pagará cada ${S.sim.forma==='Quincenal'?'quincena':'mes'} antes de llenar la solicitud.</p>
   <div class="card"><div class="grid">
     ${simInput('nombre','Nombre del cliente',{type:'text',mode:'text',ph:'Opcional, sale en el PDF'})}${simInput('celular','Celular del cliente',{type:'tel',mode:'tel',ph:'Opcional, para WhatsApp'})}
-    ${(S.params.productos||[]).length?`<div class="f full"><label class="t" for="smProd">Producto de crédito</label><select id="smProd" data-smprod="1"><option value="">Sin producto (tasa libre)</option>${S.params.productos.map(p=>`<option ${S.sim.producto===p.nombre?'selected':''}>${esc(p.nombre)}</option>`).join('')}</select>${simProducto()?`<span class="hint">${esc(prodResumen(simProducto()))}</span>`:''}</div>`:''}
+    ${hayTarifario()?`<div class="f"><label class="t" for="smProd">Tipo de préstamo</label><select id="smProd" data-smprod="1"><option value="">${isOficina()?'Sin tipo (tasa libre, solo oficina)':'Seleccione…'}</option>${prodVigentes().map(p=>`<option ${S.sim.producto===p.nombre?'selected':''}>${esc(p.nombre)}</option>`).join('')}</select>${simProducto()?`<span class="hint">${esc(prodResumen(simProducto()))}</span>`:''}</div>${simChips('tipoCliente','Tipo de cliente',['Socio de CACIH','No socio'])}`:''}
     ${simInput('monto','Monto (L)',{ph:'Ej. 30000'})}${simInput('plazo','Plazo (meses)',{mode:'numeric'})}
-    ${simProducto()?`<div class="f"><span class="t">Tasa</span><b style="padding:10px 0">${esc(S.sim.tasa)} % ${esc(S.sim.tasaTipo.toLowerCase())}</b></div>`:simInput('tasa','Tasa de interés (%)',{ph:'Ej. 2'})+simChips('tasaTipo','La tasa es',['Mensual','Anual'])}
+    ${simProducto()||!isOficina()?`<div class="f"><span class="t">Tasa de interés</span><b class="tasafija">${S.sim.tasa!==''?esc(S.sim.tasa)+' % '+esc(S.sim.tasaTipo.toLowerCase()):'—'}</b><span class="hint">${simProducto()?(tasaDe(simProducto(),S.sim.tipoCliente==='Socio de CACIH').pref?'Preferencial para socios · ':'')+'Del tarifario de la oficina':hayTarifario()?'Elija el tipo de préstamo':'La oficina aún no definió las tasas'}</span></div>`:simInput('tasa','Tasa de interés (%)',{ph:'Ej. 2'})+simChips('tasaTipo','La tasa es',['Mensual','Anual'])}
     ${simChips('forma','Forma de pago',['Mensual','Quincenal'])}${simChips('metodo','Método',METODOS)}
     ${simInput('comision','Comisión (L)',{ph:'Opcional'})}${simInput('seguro','Seguro (L)',{ph:'Opcional'})}${simInput('inicio','Fecha del primer pago',{type:'date',mode:'none'})}${simInput('ingreso','Ingreso mensual disponible (L)',{ph:'Opcional',hint:'Ingresos menos gastos del hogar. Sirve para ver si la cuota es pagable.'})}
     <div class="f full note" style="font-size:12.5px"><b>Cuota nivelada:</b> paga lo mismo cada mes; al inicio va más a intereses. <b>Capital fijo:</b> abona igual a capital; la cuota empieza más alta, baja cada mes y se pagan menos intereses.</div>
@@ -506,14 +518,15 @@ async function simPdf(btn,compartir){const m=S.sim,p=planPagos(m);if(!p)return;b
     if(compartir){await compartirPlan(doc,nom,p,m)}else{doc.save(nom);toast('Plan de pagos descargado')}}
   catch(e){toast(errMsg(e),4000)}finally{btn.disabled=false;btn.textContent=txt}}
 document.addEventListener('input',e=>{const el=e.target;if(el.dataset.sim&&S.sim&&el.type!=='radio'){S.sim[el.dataset.sim]=el.value;simRefrescar()}});
-document.addEventListener('change',e=>{const el=e.target;if(el.dataset.sim&&S.sim&&el.type==='radio'){S.sim[el.dataset.sim]=el.value;render()}});
+document.addEventListener('change',e=>{const el=e.target;if(el.dataset.sim&&S.sim&&el.type==='radio'){S.sim[el.dataset.sim]=el.value;if(el.dataset.sim==='tipoCliente')simTarifa();render()}});
+function simTarifa(){const p=simProducto();if(p){const t=tasaDe(p,S.sim.tipoCliente==='Socio de CACIH');S.sim.tasa=t.tasa;S.sim.tasaTipo=t.tasaTipo}else if(!isOficina())S.sim.tasa=''}
 document.addEventListener('click',e=>{const t=e.target.closest('button');if(!t||!S.session)return;
   if(t.dataset.simplazo){S.sim.plazo=t.dataset.simplazo;render()}
   if(t.id==='simPdf')simPdf(t);
   if(t.id==='simWa')simPdf(t,true);
   if(t.id==='simPrint'){const pr=$('#print');pr.innerHTML=planHTML();window.print()}
-  if(t.id==='simUsar'){const m=S.sim;cAbrir();Object.assign(S.cdraft.cond,{producto:m.producto||'',monto:String(m.monto),plazo:String(m.plazo),tasa:String(m.tasa),tasaTipo:m.tasaTipo,forma:m.forma,metodo:m.metodo,comision:String(m.comision||''),seguro:String(m.seguro||'')});cSave();S.cstep=0;S.csent=null;setView('credito');toast('Condiciones copiadas a la solicitud de crédito')}
-  if(t.id==='crVerPlan'){const k=S.cdraft.cond;simDesde({producto:k.producto||'',celular:S.cdraft.cli.cel1||'',comision:k.comision,seguro:k.seguro,monto:k.monto,plazo:k.plazo,tasa:k.tasa,tasaTipo:k.tasaTipo,forma:k.forma==='Quincenal'?'Quincenal':'Mensual',metodo:k.metodo||METODOS[0]},nombreDe(S.cdraft.cli))}
+  if(t.id==='simUsar'){const m=S.sim;cAbrir();Object.assign(S.cdraft.cond,{producto:m.producto||'',tipoCliente:m.tipoCliente||'',monto:String(m.monto),plazo:String(m.plazo),tasa:String(m.tasa),tasaTipo:m.tasaTipo,forma:m.forma,metodo:m.metodo,comision:String(m.comision||''),seguro:String(m.seguro||'')});aplicarTarifa(S.cdraft.cond);cSave();S.cstep=0;S.csent=null;setView('credito');toast('Condiciones copiadas a la solicitud de crédito')}
+  if(t.id==='crVerPlan'){const k=S.cdraft.cond;simDesde({producto:k.producto||'',tipoCliente:k.tipoCliente||'No socio',celular:S.cdraft.cli.cel1||'',comision:k.comision,seguro:k.seguro,monto:k.monto,plazo:k.plazo,tasa:k.tasa,tasaTipo:k.tasaTipo,forma:k.forma==='Quincenal'?'Quincenal':'Mensual',metodo:k.metodo||METODOS[0]},nombreDe(S.cdraft.cli))}
   if(t.id==='crPlan'&&S.cdetail){const s=S.cdetail.s,r=s.resolucion?.decision==='Aprobado'?s.resolucion:null,k=s.datos?.cond||{},b=r||{monto:s.monto_solicitado,plazo:s.plazo_meses,tasa:k.tasa,tasaTipo:k.tasaTipo,forma:k.forma,metodo:k.metodo};
     simDesde({celular:s.datos?.cli?.cel1||'',comision:k.comision,seguro:k.seguro,monto:String(b.monto),plazo:String(b.plazo),tasa:String(b.tasa??''),tasaTipo:b.tasaTipo||'Mensual',forma:b.forma==='Quincenal'?'Quincenal':'Mensual',metodo:b.metodo||METODOS[0]},s.nombres+' '+s.apellidos)}
 });
@@ -523,10 +536,15 @@ document.addEventListener('click',e=>{const t=e.target.closest('button');if(!t||
    v1.7 · productos, capacidad de pago, análisis, cruce con socios, WhatsApp
    ===================================================================== */
 const ANALISIS=[['buro','Buró de crédito consultado'],['visita','Visita al negocio o vivienda'],['documentos','Documentos completos'],['referencias','Referencias verificadas'],['capacidad','Capacidad de pago revisada']];
-const prodPorNombre=n=>(S.params.productos||[]).find(p=>p.nombre===n)||null;
+const prodVigentes=()=>(S.params.productos||[]).filter(p=>p&&p.nombre&&p.tasa!==null&&p.tasa!==''&&p.tasa!==undefined&&p.activo!==false);
+const prodPorNombre=n=>prodVigentes().find(p=>p.nombre===n)||null;
+const hayTarifario=()=>prodVigentes().length>0;
+const esSocioCond=k=>k.tipoCliente==='Socio de CACIH';
+function tasaDe(p,socio){if(!p)return null;const t=socio&&p.tasaSocio!==null&&p.tasaSocio!==''&&p.tasaSocio!==undefined?p.tasaSocio:p.tasa;return{tasa:String(t),tasaTipo:p.tasaTipo||'Mensual',pref:socio&&t===p.tasaSocio}}
+function aplicarTarifa(k){const p=prodPorNombre(k.producto);if(!p){if(hayTarifario()){k.tasa=''}return}const t=tasaDe(p,esSocioCond(k));k.tasa=t.tasa;k.tasaTipo=t.tasaTipo;if(p.garantia&&!k.garantia)k.garantia=p.garantia}
 const cProducto=()=>S.cdraft?prodPorNombre(S.cdraft.cond.producto):null;
 const simProducto=()=>S.sim?prodPorNombre(S.sim.producto):null;
-function prodResumen(p){return [`Tasa ${p.tasa} % ${String(p.tasaTipo||'Mensual').toLowerCase()}`,num(p.montoMin)>0?'desde '+L(p.montoMin):'',num(p.montoMax)>0?'hasta '+L(p.montoMax):'',num(p.plazoMax)>0?'plazo hasta '+p.plazoMax+' meses':''].filter(Boolean).join(' · ')}
+function prodResumen(p){return [`Tasa ${p.tasa} %${p.tasaSocio!==null&&p.tasaSocio!==''&&p.tasaSocio!==undefined?' (socios '+p.tasaSocio+' %)':''} ${String(p.tasaTipo||'Mensual').toLowerCase()}`,num(p.montoMin)>0?'desde '+L(p.montoMin):'',num(p.montoMax)>0?'hasta '+L(p.montoMax):'',num(p.plazoMax)>0?'plazo hasta '+p.plazoMax+' meses':''].filter(Boolean).join(' · ')}
 function capacidad(x,cuota,forma){const ing=num(x.ingMes),g=num(x.gastosMes),dd=num(x.deudasMes);if(!(ing>0))return{disponible:null,relacion:null};
   const disp=ing-g-dd,cm=forma==='Quincenal'?cuota*2:cuota;return{ingresos:ing,gastos:g,deudas:dd,disponible:Math.round(disp*100)/100,cuotaMes:Math.round(cm*100)/100,relacion:cm>0&&disp>0?Math.round(cm/disp*1000)/10:cm>0?999:null}}
 function vCapacidad(c){const k=c.cond,x=c.cli,cu=cuotaEst(k.monto,k.plazo,k.tasa,k.tasaTipo,k.forma,k.metodo),cap=capacidad(x,cu,k.forma),lim=Number(S.params.limite_cuota_ingreso)||40;
@@ -534,14 +552,18 @@ function vCapacidad(c){const k=c.cond,x=c.cli,cu=cuotaEst(k.monto,k.plazo,k.tasa
   if(cap.disponible<=0)return `<div class="warnnote">Los gastos y deudas igualan o superan los ingresos (disponible ${L(cap.disponible)}). El comité difícilmente aprobará la cuota.</div>`;
   if(!cu)return `<div class="note">Disponible cada mes: <b>${L(cap.disponible)}</b>. Indique la tasa en el paso 1 para comparar con la cuota.</div>`;
   return `<div class="${cap.relacion>lim?'warnnote':'note'}">Disponible cada mes: <b>${L(cap.disponible)}</b> · cuota ${L(cap.cuotaMes)} = <b>${cap.relacion} %</b> del disponible. ${cap.relacion>lim?`Supera el ${lim} % recomendado: considere un plazo mayor o un monto menor.`:`Dentro del ${lim} % recomendado.`}</div>`}
-function vCapDetalle(s){const c=s.datos?.capacidad,lim=Number(S.params.limite_cuota_ingreso)||40;if(!c||c.disponible==null)return '';
+function vCapDetalle(s){const k=s.datos?.cond||{},x=s.datos?.cli||{},c=capacidad(x,cuotaEst(s.monto_solicitado,s.plazo_meses,k.tasa,k.tasaTipo,k.forma,k.metodo),k.forma),lim=Number(S.params.limite_cuota_ingreso)||40;if(c.disponible==null)return '';
   return `<div class="card" style="margin-top:14px"><h3>Capacidad de pago</h3><div class="kpis mini">${[['Ingresos',L(c.ingresos)],['Gastos',L(c.gastos)],['Otras deudas',L(c.deudas)],['Disponible',L(c.disponible)],['Cuota estimada / mes',L(c.cuotaMes)],['Cuota / disponible',c.relacion!=null?c.relacion+' %':'—']].map(([a,b])=>`<div><span>${a}</span><b class="num">${b}</b></div>`).join('')}</div>${c.relacion>lim?`<div class="warnnote" style="margin-top:10px">La cuota supera el ${lim} % del ingreso disponible.</div>`:''}</div>`}
-function vRelacion(){const{s,soc,otros,comoFiador}=S.cdetail,ap=soc.find(x=>x.estado==='Aprobada');
+function vRelacion(){const{s,soc,otros,rel}=S.cdetail,ap=soc.find(x=>x.estado==='Aprobada'),comoFiador=rel.solicitante_es_fiador||[],k=s.datos?.cond||{};
   const lin=[];
   lin.push(ap?`<li><b>Es socio/a de CACIH</b> · código <span class="mono">${esc(ap.codigo_socio||ap.folio)}</span> · ${esc(ap.tipo_cuenta||'')} desde ${fecha(ap.revisado_en||ap.creado_en)}</li>`:soc.length?`<li>Tiene solicitud de afiliación <b>${esc(soc[0].estado.toLowerCase())}</b> (<span class="mono">${esc(soc[0].folio)}</span>)</li>`:'<li><b>No es socio/a</b> de CACIH.</li>');
   otros.forEach(o=>lin.push(`<li>Otra solicitud de crédito <span class="mono">${esc(o.folio)}</span> · ${L(o.monto_solicitado)} · ${esc(o.estado)} · ${fecha(o.creado_en)}</li>`));
-  comoFiador.forEach(o=>lin.push(`<li>Es <b>fiador/a</b> en <span class="mono">${esc(o.folio)}</span> de ${esc(o.nombres+' '+o.apellidos)} · ${esc(o.estado)}</li>`));
-  return `<div class="card" style="margin-top:14px"><h3>Relación con CACIH</h3><ul class="log" style="margin-top:6px">${lin.join('')}</ul></div>`}
+  if(esSocioCond(k)&&!ap)lin.push(`<li class="alerta">Se registró como <b>socio/a</b> (tasa preferencial), pero no aparece afiliación aprobada con esta identidad. Verifique el N° de cliente ${esc(s.datos?.cli?.clienteNo||'')}.</li>`);
+  comoFiador.forEach(o=>lin.push(`<li>Es <b>fiador/a</b> en <span class="mono">${esc(o.folio)}</span> de ${esc(o.deudor)} · ${L(o.monto)} · ${esc(o.estado)}</li>`));
+  const cu=cuotaEst(s.monto_solicitado,s.plazo_meses,k.tasa,k.tasaTipo,k.forma,k.metodo),cm=k.forma==='Quincenal'?cu*2:cu,lim=Number(S.params.limite_cuota_ingreso)||40;
+  const fi=(s.fiadores||[]).map((f,i)=>{const r=(rel.fiadores||[])[i]||{},disp=num(f.sueldo)-num(f.gastosMes),pct=cm>0&&disp>0?Math.round(cm/disp*1000)/10:null,mal=disp<=0||(pct!=null&&pct>lim);
+    return `<li><b>Fiador ${i+1}: ${esc(nombreDe(f))}</b>${r.es_socio?' · socio/a':''} · ${f.sueldo?`ingreso ${L(f.sueldo)} − gastos ${L(f.gastosMes)} = disponible <b>${L(disp)}</b>`:'sin ingresos registrados'}${cu?` · <span class="${mal?'alerta':''}">la cuota sería el ${pct!=null?pct+' %':'—'} de su disponible</span>`:''}${(r.garantiza||[]).length?` · <span class="alerta">ya es fiador en ${r.garantiza.length} crédito(s): ${r.garantiza.map(g=>esc(g.folio)).join(', ')}</span>`:''}${(r.deudas||[]).length?` · tiene ${r.deudas.length} crédito(s) propio(s)`:''}${r.cruzada?' · <b class="alerta">FIANZA CRUZADA: el solicitante es su fiador en otro crédito</b>':''}</li>`}).join('');
+  return `<div class="card" style="margin-top:14px"><h3>Relación con CACIH y fiadores</h3><ul class="log" style="margin-top:6px">${lin.join('')}${fi}</ul></div>`}
 function vAnalisis(){const{s}=S.cdetail,a=S.cana;if(s.estado!=='Pendiente'&&!s.analisis)return '';const ro=s.estado!=='Pendiente';
   return `<div class="card" style="margin-top:14px"><h3>Análisis de crédito${s.analizado_en?` <span class="hint">· guardado ${fechaHora(s.analizado_en)}</span>`:''}</h3>
   <div class="grid" style="margin-top:8px">${ANALISIS.map(([k,t])=>`<label class="check" style="margin:0"><input type="checkbox" data-cana="${k}" ${a.lista[k]?'checked':''} ${ro?'disabled':''}><span>${t}</span></label>`).join('')}
@@ -559,8 +581,8 @@ async function compartirPlan(doc,nom,p,m){
   if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:'Plan de pagos CACIH',text:txt});return}catch(e){if(e.name==='AbortError')return}}
   doc.save(nom);const cel=String(m.celular||'').replace(/\D/g,'');window.open(`https://wa.me/${cel.length===8?'504'+cel:cel}?text=${encodeURIComponent(txt+' (Le envío el PDF a continuación.)')}`,'_blank','noopener');toast('PDF descargado: adjúntelo en el chat de WhatsApp',6000)}
 document.addEventListener('change',e=>{const el=e.target;
-  if(el.dataset.cprod&&S.cdraft){const p=prodPorNombre(el.value),k=S.cdraft.cond;k.producto=el.value;if(p){k.tasa=String(p.tasa);k.tasaTipo=p.tasaTipo||'Mensual';if(!k.clasif)k.clasif=p.nombre}cSave();render()}
-  if(el.dataset.smprod&&S.sim){const p=prodPorNombre(el.value);S.sim.producto=el.value;if(p){S.sim.tasa=String(p.tasa);S.sim.tasaTipo=p.tasaTipo||'Mensual'}render()}
+  if(el.dataset.cprod&&S.cdraft){const k=S.cdraft.cond;k.producto=el.value;aplicarTarifa(k);cSave();render()}
+  if(el.dataset.smprod&&S.sim){S.sim.producto=el.value;simTarifa();render()}
   if(el.dataset.cana&&S.cana){S.cana.lista[el.dataset.cana]=el.checked}});
 document.addEventListener('input',e=>{const el=e.target;
   if(el.dataset.cananota&&S.cana)S.cana.nota=el.value;

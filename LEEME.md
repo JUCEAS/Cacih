@@ -12,7 +12,7 @@ Base de datos: Supabase, proyecto **cacih** (`yjvhdkwdylrduunkbykw`).
 | `index.html` | Pantalla y estilos de la app |
 | `app.js` | Funcionamiento de la app (desde la versión 1.3) |
 | `credito.js` | Solicitud de crédito, fiador solidario y simulador (desde la versión 1.5) |
-| `seguridad.js` | Crear usuarios, PIN, cierre a distancia, modo práctica (desde la versión 1.7) |
+| `seguridad.js` | Tarifario de tasas, crear usuarios, PIN, cierre a distancia, modo práctica (desde la versión 1.7) |
 | `logo-cacih.png`, `logo-icono.png` | Logo de CACIH (desde la versión 1.4) |
 | `vendor/` | Librerías de apoyo, incluidas en la app (6 archivos) |
 | `sw.js` | Permite abrirla sin señal |
@@ -91,6 +91,30 @@ Llega primero un aviso de prueba.
 - **iPhone:** primero hay que instalar la app (Compartir → Agregar a inicio) y activar los avisos desde la app instalada.
 - Si el navegador bloqueó los avisos, se permiten desde el candado junto a la dirección.
 - Al tocar **Salir**, ese dispositivo deja de recibir avisos.
+
+## Versión 1.8 · Tarifario de tasas y controles
+
+### Instalar la 1.8
+1. La base de datos **ya quedó lista**.
+2. GitHub → suba `index.html`, `app.js`, `credito.js`, `seguridad.js` y `sw.js`.
+3. En *Parámetros* debe decir **1.8.0**.
+
+### Tarifario (pestaña **Tasas**, en la computadora)
+- Ya vienen creados 6 tipos de préstamo **sin tasa**: básico, con avales (fiduciario), prendario, hipotecario, de fideicomiso y blando. Escriba las tasas y toque **Guardar tarifario**.
+- Por cada tipo: **tasa básica**, **tasa preferencial para socios** (vacía = igual a la básica), mensual o anual, garantía sugerida, montos, plazo máximo, y *Vigente* o *Pausado*.
+- Puede agregar más tipos (ej. préstamo de emergencia) o pausarlos sin borrarlos.
+- En el teléfono el promotor elige **tipo de préstamo** y **Socio de CACIH / No socio**; la tasa aparece sola y no se puede escribir.
+- **El servidor rechaza** cualquier solicitud cuya tasa, monto o plazo no coincida con el tarifario vigente.
+- Si el cliente dice ser socio, debe dar su N° de cliente; la oficina ve una alerta si no aparece como socio aprobado.
+
+### Otros cambios
+- **Acta del comité**: al aprobar o denegar se pide el N° de acta y los miembros presentes; sale en la hoja impresa.
+- **Fiador**: ingreso y gastos obligatorios; la oficina ve qué porcentaje de su disponible sería la cuota, si ya es fiador de otros créditos y si hay **fianza cruzada**.
+- **Conozca a su cliente**: vencimiento de la identidad, nacionalidad y pregunta PEP para todo solicitante.
+- **Capacidad de pago** recalculada en la oficina con los datos originales. Límite recomendado bajado a **35 %**.
+- **Modo práctica** seguro: se apaga solo a las 2 horas, y al final ofrece *Terminar práctica* o *Es un cliente real: enviar*.
+- Aviso único a cada promotor para activar el **bloqueo de pantalla** del teléfono.
+- Los teléfonos descargan ~1 MB menos al instalar (la herramienta de Excel solo se baja en la oficina).
 
 ## Versión 1.7 · Mejoras del análisis
 

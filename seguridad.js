@@ -62,7 +62,7 @@ function pinPantalla(modo){if(!window.crypto?.subtle)return;
     ${nuevo?'':'<button class="btn-sm" id="pinOlvido" style="margin-top:14px">Olvidé mi PIN</button>'}</div>`;
   el.dataset.modo=modo;setTimeout(()=>{const i=$('#pinIn');if(i)i.focus()},50)}
 function pinQuitar(){pinBloqueado=false;const el=$('#lock');if(el){el.hidden=true;el.innerHTML=''}document.body.classList.remove('locked')}
-function pinArranque(){if(!S.session||!S.perfil?.activo||S.cambiarClave)return;if(!S.params.pedir_pin){pinQuitar();return}pinPantalla(pinGuardado()?'pedir':'nuevo')}
+function pinArranque(){if(!S.session||!S.perfil?.activo||S.cambiarClave)return;if(!S.params.pedir_pin){pinQuitar();avisoBloqueo();return}pinPantalla(pinGuardado()?'pedir':'nuevo')}
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden){ocultoDesde=Date.now();return}
   if(ocultoDesde&&S.session&&S.perfil?.activo&&S.params.pedir_pin&&!S.cambiarClave&&!pinBloqueado&&pinGuardado()&&Date.now()-ocultoDesde>PIN_MINUTOS*60000)pinPantalla('pedir');
@@ -109,16 +109,34 @@ function vErrores(){if(!isAdmin())return '';
   const l=S.errores;return `<div class="card" style="margin-top:16px"><h2>Errores recientes en los teléfonos</h2><p class="hint">Fallos al enviar o al usar la app. Si un promotor reporta un problema, revise aquí primero.</p>
   ${l==null?'<p class="empty"><span class="spin"></span></p>':l.length?`<ul class="log">${l.map(x=>{const u=S.usuarios?.find(v=>v.user_id===x.usuario);return `<li>${fechaHora(x.creado_en)} · ${esc(u?.nombre||'usuario')} · v${esc(x.version||'')} · <b>${esc(x.donde||'')}</b>: ${esc(x.mensaje)}</li>`}).join('')}</ul>`:'<p class="hint">Sin errores registrados.</p>'}</div>`}
 
-/* ---------- Productos de crédito (Parámetros) ---------- */
-function vProductos(){if(!isAdmin())return '';
-  if(!S.prodEdit)S.prodEdit=JSON.parse(JSON.stringify(S.params.productos||[]));
-  const l=S.prodEdit,inpP=(i,k,label,o={})=>`<div class="f"><label class="t" for="pr_${i}_${k}">${label}</label><input id="pr_${i}_${k}" data-prod="${i}" data-pk="${k}" type="${o.type||'number'}" inputmode="${o.type==='text'?'text':'decimal'}" value="${esc(l[i][k]??'')}" placeholder="${o.ph||''}"></div>`;
-  return `<div class="card" style="margin-top:16px"><h2>Productos de crédito</h2><p class="hint">Cada producto fija su tasa, montos y plazo máximo. El promotor elige el producto y no puede cambiar la tasa. Sin productos, la tasa se escribe a mano.</p>
-  ${l.map((p,i)=>`<div class="prod"><div class="grid">${inpP(i,'nombre','Nombre',{type:'text',ph:'Ej. Agropecuario'})}${inpP(i,'tasa','Tasa (%)',{ph:'2'})}<div class="f"><label class="t" for="pr_${i}_tasaTipo">La tasa es</label><select id="pr_${i}_tasaTipo" data-prod="${i}" data-pk="tasaTipo">${['Mensual','Anual'].map(o=>`<option ${p.tasaTipo===o?'selected':''}>${o}</option>`).join('')}</select></div>${inpP(i,'montoMin','Monto mínimo (L)',{ph:'Opcional'})}${inpP(i,'montoMax','Monto máximo (L)',{ph:'Opcional'})}${inpP(i,'plazoMax','Plazo máximo (meses)',{ph:'Opcional'})}</div><button class="btn-sm btn-bad" data-prodquitar="${i}" style="margin-top:8px">Quitar</button></div>`).join('')}
-  <div class="rowbtns"><button id="prodAgregar">Agregar producto</button><button class="btn-primary" id="prodGuardar">Guardar productos</button></div></div>`}
+/* ---------- Tarifario de tasas (lo define el Administrador; el campo solo lo usa) ---------- */
+const GARANTIAS_T=['','Fiduciaria (fiador solidario)','Prendaria','Hipotecaria','Ahorro o aportaciones','Sin garantía'];
+const vacio=v=>v===null||v===undefined||v==='';
+function vTasas(){const admin=isAdmin();
+  if(!S.prodEdit)S.prodEdit=JSON.parse(JSON.stringify(S.params.productos||[])).map(p=>({activo:true,tasaSocio:null,garantia:'',...p}));
+  const l=S.prodEdit,inpP=(i,k,label,o={})=>`<div class="f"><label class="t" for="pr_${i}_${k}">${label}</label><input id="pr_${i}_${k}" data-prod="${i}" data-pk="${k}" type="${o.type||'number'}" inputmode="${o.type==='text'?'text':'decimal'}" step="any" value="${esc(l[i][k]??'')}" placeholder="${o.ph||''}" ${admin?'':'disabled'}></div>`;
+  const vig=l.filter(p=>p.activo!==false&&!vacio(p.tasa)).length;
+  return `<h1>Tarifario de tasas</h1><p class="lead">Las tasas que defina aquí aparecen solas en los teléfonos. El promotor elige el tipo de préstamo y si el cliente es socio; no puede escribir ni cambiar la tasa. El servidor rechaza cualquier solicitud con otra tasa.</p>
+  <div class="note" style="margin:12px 0">${vig?`<b>${vig}</b> tipo(s) de préstamo vigente(s) en los teléfonos.`:'<b>Ningún tipo de préstamo tiene tasa todavía.</b> Mientras tanto, las solicitudes llegan sin tasa y la oficina la fija al resolver.'} ${S.params.actualizado_en?`Última actualización: ${fechaHora(S.params.actualizado_en)}.`:''}</div>
+  <div class="tscroll card" style="padding:0"><table class="plain amort tarifa"><thead><tr><th>Tipo de préstamo</th><th>Tasa básica</th><th>Tasa socios</th><th>Periodo</th><th>Monto</th><th>Plazo máx.</th><th>Estado</th></tr></thead><tbody>
+  ${l.map(p=>`<tr class="${p.activo===false||vacio(p.tasa)?'apagado':''}"><td><b>${esc(p.nombre||'(sin nombre)')}</b>${p.garantia?`<br><span class="hint">${esc(p.garantia)}</span>`:''}</td><td class="num">${vacio(p.tasa)?'—':esc(p.tasa)+' %'}</td><td class="num">${vacio(p.tasaSocio)?'<span class="hint">igual</span>':esc(p.tasaSocio)+' %'}</td><td>${esc((p.tasaTipo||'Mensual').toLowerCase())}</td><td class="num">${[!vacio(p.montoMin)?L(p.montoMin):'',!vacio(p.montoMax)?L(p.montoMax):''].filter(Boolean).join(' – ')||'—'}</td><td class="num">${vacio(p.plazoMax)?'—':p.plazoMax+' m'}</td><td>${p.activo===false?'Pausado':vacio(p.tasa)?'Sin tasa':'Vigente'}</td></tr>`).join('')}</tbody></table></div>
+  ${admin?`<h2 style="margin:22px 0 8px">Editar tarifario</h2>
+  ${l.map((p,i)=>`<div class="prod"><div class="grid">${inpP(i,'nombre','Tipo de préstamo',{type:'text',ph:'Ej. Préstamo hipotecario'})}
+    <div class="f"><label class="t" for="pr_${i}_garantia">Garantía sugerida</label><select id="pr_${i}_garantia" data-prod="${i}" data-pk="garantia">${GARANTIAS_T.map(o=>`<option value="${esc(o)}" ${(p.garantia||'')===o?'selected':''}>${o||'La elige el promotor'}</option>`).join('')}</select></div>
+    ${inpP(i,'tasa','Tasa básica (%)',{ph:'Ej. 2'})}${inpP(i,'tasaSocio','Tasa preferencial socios (%)',{ph:'Vacío = igual a la básica'})}
+    <div class="f"><label class="t" for="pr_${i}_tasaTipo">La tasa es</label><select id="pr_${i}_tasaTipo" data-prod="${i}" data-pk="tasaTipo">${['Mensual','Anual'].map(o=>`<option ${p.tasaTipo===o?'selected':''}>${o}</option>`).join('')}</select></div>
+    <div class="f"><label class="t" for="pr_${i}_activo">Estado</label><select id="pr_${i}_activo" data-prod="${i}" data-pk="activo"><option value="true" ${p.activo!==false?'selected':''}>Vigente</option><option value="false" ${p.activo===false?'selected':''}>Pausado (no aparece en el campo)</option></select></div>
+    ${inpP(i,'montoMin','Monto mínimo (L)',{ph:'Opcional'})}${inpP(i,'montoMax','Monto máximo (L)',{ph:'Opcional'})}${inpP(i,'plazoMax','Plazo máximo (meses)',{ph:'Opcional'})}</div>
+    <button class="btn-sm btn-bad" data-prodquitar="${i}" style="margin-top:8px">Quitar</button></div>`).join('')}
+  <div class="rowbtns"><button id="prodAgregar">Agregar tipo de préstamo</button><button class="btn-primary" id="prodGuardar">Guardar tarifario</button></div>
+  <p class="hint">Los teléfonos reciben el tarifario nuevo al abrir la app o al recuperar la señal. Una solicitud guardada sin señal se envía con la tasa vigente al momento de enviarla.</p>`:'<p class="hint">Solo el administrador puede cambiar el tarifario.</p>'}`}
 
 /* ---------- Modo práctica ---------- */
-try{S.practica=localStorage.getItem('cacih_practica')==='1'}catch(e){S.practica=false}
+const PRACTICA_MAX=2*3600e3;
+function leerPractica(){try{const v=Number(localStorage.getItem('cacih_practica')||0);return v>1&&Date.now()-v<PRACTICA_MAX}catch(e){return false}}
+S.practica=leerPractica();
+function salirPractica(){S.practica=false;try{localStorage.setItem('cacih_practica','0')}catch(x){}practicaUI()}
+setInterval(()=>{if(S.practica&&!leerPractica()){salirPractica();render();toast('El modo práctica se apagó solo (2 horas).',5000)}},60000);
 function practicaUI(){let b=$('#practicaBtn');if(!b){b=document.createElement('button');b.id='practicaBtn';const lo=$('#logout');lo.parentNode.insertBefore(b,lo)}
   b.textContent=S.practica?'Práctica: sí':'Práctica';b.className=S.practica?'on':'';b.title='Modo práctica: llene formularios sin enviarlos a la oficina';
   document.body.classList.toggle('practica',!!S.practica)}
@@ -150,18 +168,22 @@ document.addEventListener('click',async e=>{const t=e.target.closest('button');i
     t.disabled=true;t.innerHTML='<span class="spin"></span>';try{await llamarUsuarios({accion:'clave',user_id:t.dataset.uclaveok,clave});S.uClave={id:t.dataset.uclaveok,clave,listo:true};render();loadUsuarios()}catch(x){er.textContent=errMsg(x);t.disabled=false;t.textContent='Asignar'}}
   if(t.id==='ucCopiar'||t.id==='ucWa'){const u=S.usuarios.find(v=>v.user_id===S.uClave.id)||{},txt=textoAcceso(u.nombre||'',u.email||'',S.uClave.clave);if(t.id==='ucCopiar')copiar(txt);else window.open(waLink('',txt),'_blank','noopener')}
   if(t.dataset.ucancel!==undefined){S.uClave=null;render()}
-  if(t.id==='practicaBtn'){S.practica=!S.practica;try{localStorage.setItem('cacih_practica',S.practica?'1':'0')}catch(x){}practicaUI();render();toast(S.practica?'Modo práctica activado: nada se envía a la oficina':'Modo práctica desactivado',4000)}
+  if(t.id==='sendReal'){t.disabled=true;salirPractica();await enviar();return}
+  if(t.id==='practicaBtn'){S.practica=!S.practica;try{localStorage.setItem('cacih_practica',S.practica?String(Date.now()):'0')}catch(x){}practicaUI();render();toast(S.practica?'Modo práctica por 2 horas: al final podrá elegir si la solicitud era real':'Modo práctica desactivado',5000)}
   if(t.dataset.urev){if(!t.dataset.sure){t.dataset.sure='1';t.textContent='¿Confirmar cierre?';setTimeout(()=>{t.textContent='Cerrar sesiones';delete t.dataset.sure},4000);return}
     t.disabled=true;const{error}=await sb.rpc('revocar_sesiones',{p_id:t.dataset.urev});if(error){toast(errMsg(error),5000);t.disabled=false;return}
     toast('Listo: la app se cerrará en sus teléfonos en cuanto tengan señal (máximo 2 minutos).',6000);t.textContent='Sesiones cerradas'}
-  if(t.id==='prodAgregar'){S.prodEdit.push({nombre:'',tasa:'',tasaTipo:'Mensual',montoMin:'',montoMax:'',plazoMax:''});render()}
+  if(t.id==='prodAgregar'){S.prodEdit.push({nombre:'',tasa:'',tasaSocio:'',tasaTipo:'Mensual',garantia:'',activo:true,montoMin:'',montoMax:'',plazoMax:''});render()}
   if(t.dataset.prodquitar!==undefined){S.prodEdit.splice(+t.dataset.prodquitar,1);render()}
-  if(t.id==='prodGuardar'){const l=S.prodEdit.map(p=>({nombre:String(p.nombre||'').trim(),tasa:num(p.tasa),tasaTipo:p.tasaTipo||'Mensual',montoMin:num(p.montoMin)||null,montoMax:num(p.montoMax)||null,plazoMax:Math.round(num(p.plazoMax))||null}));
-    if(l.some(p=>!p.nombre||!(p.tasa>=0))){toast('Cada producto necesita nombre y tasa.');return}
-    if(new Set(l.map(p=>p.nombre.toLowerCase())).size!==l.length){toast('Hay dos productos con el mismo nombre.');return}
+  if(t.id==='prodGuardar'){const nn=v=>vacio(v)?null:num(v);
+    const l=S.prodEdit.map(p=>({nombre:String(p.nombre||'').trim(),tasa:nn(p.tasa),tasaSocio:nn(p.tasaSocio),tasaTipo:p.tasaTipo||'Mensual',garantia:p.garantia||'',activo:p.activo!==false&&p.activo!=='false',montoMin:nn(p.montoMin),montoMax:nn(p.montoMax),plazoMax:vacio(p.plazoMax)?null:Math.round(num(p.plazoMax))}));
+    if(l.some(p=>!p.nombre)){toast('Cada tipo de préstamo necesita nombre.');return}
+    if(new Set(l.map(p=>p.nombre.toLowerCase())).size!==l.length){toast('Hay dos tipos de préstamo con el mismo nombre.');return}
+    if(l.some(p=>(p.tasa!==null&&(p.tasa<0||p.tasa>(p.tasaTipo==='Anual'?100:10)))||(p.tasaSocio!==null&&(p.tasaSocio<0||p.tasaSocio>(p.tasaTipo==='Anual'?100:10))))){toast('Revise las tasas: mensual entre 0 y 10 %, anual entre 0 y 100 %.',5000);return}
+    if(l.some(p=>p.tasaSocio!==null&&p.tasa===null)){toast('Para poner tasa de socios, primero defina la tasa básica.');return}
     if(l.some(p=>p.montoMin&&p.montoMax&&p.montoMin>p.montoMax)){toast('El monto mínimo no puede ser mayor que el máximo.');return}
     t.disabled=true;const{error}=await sb.from('parametros').update({productos:l,actualizado_en:new Date().toISOString()}).eq('id',1);t.disabled=false;
-    if(error){toast(errMsg(error));return}S.params.productos=l;S.prodEdit=null;try{localStorage.setItem('cacih_params',JSON.stringify(S.params))}catch(x){}render();toast('Productos guardados')}
+    if(error){toast(errMsg(error));return}S.prodEdit=null;await loadParams();render();toast('Tarifario guardado: ya aparece en los teléfonos')}
 });
 document.addEventListener('input',e=>{const el=e.target;if(el.dataset.prod!==undefined&&S.prodEdit)S.prodEdit[+el.dataset.prod][el.dataset.pk]=el.value});
 document.addEventListener('change',e=>{const el=e.target;if(el.dataset.prod!==undefined&&S.prodEdit&&el.tagName==='SELECT')S.prodEdit[+el.dataset.prod][el.dataset.pk]=el.value});
@@ -174,3 +196,11 @@ async function crearUsuario(){leerNuevo();const n=S.nuevoU,er=$('#nuErr'),b=$('#
   b.disabled=true;b.innerHTML='<span class="spin"></span> Creando…';
   try{await llamarUsuarios({accion:'crear',nombre:n.nombre,email:n.email.toLowerCase(),rol:n.rol,clave:n.clave});n.listo=true;render();loadUsuarios();toast('Usuario creado y activo')}
   catch(x){er.textContent=errMsg(x);b.disabled=false;b.textContent='Crear y activar'}}
+
+function avisoBloqueo(){let visto=false;try{visto=localStorage.getItem('cacih_aviso_bloqueo')==='1'}catch(e){}if(visto)return;
+  let el=$('#lock');if(!el){el=document.createElement('div');el.id='lock';document.body.appendChild(el)}el.hidden=false;document.body.classList.add('locked');
+  el.innerHTML=`<div class="lockbox"><img src="logo-icono.png" width="64" height="64" alt="" style="border-radius:50%;background:#fff"><h2>Proteja este teléfono</h2>
+  <p class="hint" style="text-align:left">Las solicitudes guardadas incluyen fotos de identidades y firmas. Antes de trabajar:</p>
+  <ol class="pasos" style="text-align:left"><li>Active el <b>bloqueo de pantalla</b> del teléfono (PIN, patrón o huella).</li><li>No preste el teléfono con la app abierta.</li><li>Si lo pierde, avise de inmediato a la oficina para cerrar su sesión.</li></ol>
+  <button class="btn-primary" id="avisoOk" style="width:100%">Entendido</button></div>`}
+document.addEventListener('click',e=>{if(e.target.id==='avisoOk'){try{localStorage.setItem('cacih_aviso_bloqueo','1')}catch(x){}pinQuitar()}});

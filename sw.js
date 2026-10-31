@@ -1,9 +1,9 @@
 // CACIH · service worker: abre sin señal y muestra los avisos de la caja.
-const CACHE = 'cacih-v1.7.1';
+const CACHE = 'cacih-v1.8.0';
 const SHELL = [
   './', './index.html', './app.js', './credito.js', './seguridad.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './logo-cacih.png', './logo-icono.png',
   './vendor/supabase.js', './vendor/591.supabase.js',
-  './vendor/jspdf.umd.min.js', './vendor/jspdf.plugin.autotable.min.js', './vendor/html2canvas.min.js', './vendor/xlsx.full.min.js'
+  './vendor/jspdf.umd.min.js', './vendor/jspdf.plugin.autotable.min.js'
 ];
 
 self.addEventListener('install', e => {
