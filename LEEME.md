@@ -11,6 +11,7 @@ Base de datos: Supabase, proyecto **cacih** (`yjvhdkwdylrduunkbykw`).
 | --- | --- |
 | `index.html` | Pantalla y estilos de la app |
 | `app.js` | Funcionamiento de la app (desde la versión 1.3) |
+| `credito.js` | Solicitud de crédito y fiador solidario (desde la versión 1.5) |
 | `logo-cacih.png`, `logo-icono.png` | Logo de CACIH (desde la versión 1.4) |
 | `vendor/` | Librerías de apoyo, incluidas en la app (6 archivos) |
 | `sw.js` | Permite abrirla sin señal |
@@ -89,6 +90,31 @@ Llega primero un aviso de prueba.
 - **iPhone:** primero hay que instalar la app (Compartir → Agregar a inicio) y activar los avisos desde la app instalada.
 - Si el navegador bloqueó los avisos, se permiten desde el candado junto a la dirección.
 - Al tocar **Salir**, ese dispositivo deja de recibir avisos.
+
+## Versión 1.5 · Solicitud de crédito
+
+Nueva pestaña **Crédito** con el formato "Solicitud de crédito 2025" y la hoja "Datos del fiador solidario". Cualquier persona puede solicitar crédito, sea o no socia; los datos se llenan completos.
+
+### Instalar la 1.5
+
+1. La base de datos **ya quedó lista** (no hay que ejecutar nada en Supabase).
+2. GitHub → suba `index.html`, `app.js`, **`credito.js`** (nuevo) y `sw.js`.
+3. Cierre y vuelva a abrir la app. En *Parámetros* debe decir **Versión de la app 1.5.0**.
+
+### Pasos del formulario de crédito
+
+1. Condiciones: monto, plazo, tasa (mensual o anual), forma de pago, garantía, destino y deducciones. Calcula la **cuota estimada** y el **valor a recibir**.
+2. Datos del cliente · 3. Localización con GPS · 4. Actividades e ingresos, remesas y de dónde pagará
+5. Cuentas, vehículos y otros bienes · 6. Referencias y contacto de emergencia · 7. Garantía (1 o 2 fiadores si es fiduciaria)
+8. Fiador solidario (solo con garantía fiduciaria) · 9. Fotos, identidad y firmas · 10. Autorización de buró y compromiso del fiador · 11. Revisar y enviar
+
+Funciona sin señal igual que la afiliación: queda en *Mis envíos* y se envía sola.
+
+### En la oficina
+
+*Bandeja* → botón **Créditos**. Cada solicitud se imprime o descarga en PDF (solicitud en 2 hojas + 1 hoja por fiador). El comité registra **Aprobar** (monto, plazo, tasa, forma de pago; la cuota se calcula sola) o **Denegar** (con motivo). El asesor recibe el aviso. *Exportar Excel* sigue la regla de solo administrador.
+
+Folios: **C-00001**, **C-00002**…
 
 ## Versión 1.4 · Formato oficial de CACIH
 

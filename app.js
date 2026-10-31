@@ -1,7 +1,7 @@
 /* ================= Configuración ================= */
 const SUPABASE_URL='https://yjvhdkwdylrduunkbykw.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlqdmhka3dkeWxyZHV1bmtieWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyNjc1NzQsImV4cCI6MjEwNzg0MzU3NH0.r0b7VfCZIbTuEE7KA0vD-gUVfoZSfJSnyu-sLr-Xv2s';
-const VERSION='1.4.0';
+const VERSION='1.5.0';
 const VAPID_PUBLIC='BKdmYfjnL3uiR_q1sSb18aNBr2QnrcuWiZYZ8qwFTISiMWAzmgXHJcDMeQZGihYobRFfrj2FlSH1oXocK37StQo';
 const LIBS={
   xlsx:'vendor/xlsx.full.min.js',
@@ -37,7 +37,8 @@ const idb={_db:null,
 
 /* ================= Estado ================= */
 const S={session:null,perfil:null,params:{...DEFAULT_PARAMS},view:'nueva',step:0,errors:{},draft:null,queue:[],sent:null,
-  filter:'Pendiente',q:'',bandeja:[],open:null,detail:null,mine:[],usuarios:[],uFilter:'Todos',uCount:{},uLog:[],uAction:null,syncing:false,busy:false};
+  filter:'Pendiente',q:'',bandeja:[],open:null,detail:null,mine:[],usuarios:[],uFilter:'Todos',uCount:{},uLog:[],uAction:null,syncing:false,busy:false,
+  cdraft:null,cstep:0,cerrors:{},csent:null,cbusy:false,btipo:'afil',creditos:[],cfilter:'Pendiente',copen:null,cdetail:null,cres:null,cpend:0,minec:[]};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const L=n=>'L '+Number(n||0).toLocaleString('es-HN',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -209,6 +210,7 @@ function toRow(d,paths){
     declaraciones:d.decl.every(Boolean),consentimiento_datos:!!d.consent,avisos_whatsapp:!!d.waAvisos}
 }
 async function uploadOne(item){
+  if(item.kind==='credito')return cUpload(item);
   const d=item.d,uid=S.session.user.id,base=uid+'/'+d.client_id+'/',paths={};
   const keyMap={fotoDni1:'f1',fotoDni2:'f2',firma:'firma',selfie:'selfie',firmaTestigo:'firmaTestigo'};
   for(const[key,file]of[['fotoDni1','dni-frente.jpg'],['fotoDni2','dni-reverso.jpg'],['firma','firma.jpg'],['selfie','solicitante.jpg'],['firmaTestigo','firma-testigo.jpg']]){
@@ -230,7 +232,7 @@ async function syncQueue(){
   }
   await saveQueue();S.syncing=false;netbar();
   if(ok){toast(ok===1?'Solicitud enviada a la oficina':ok+' solicitudes enviadas a la oficina');if(S.view==='envios')loadMine()}
-  if(['envios','nueva'].includes(S.view))render();
+  if(['envios','nueva','credito'].includes(S.view))render();
 }
 async function enviar(){
   const d=S.draft;const item={d:JSON.parse(JSON.stringify(d)),creado:new Date().toISOString(),error:null};
@@ -253,7 +255,7 @@ async function loadBandeja(){
   const{data,error}=await q;if(error){toast(errMsg(error));return}
   S.bandeja=data;render();
 }
-async function countPend(){if(!isOficina())return;const{count}=await sb.from('solicitudes').select('id',{count:'exact',head:true}).eq('estado','Pendiente');S.pend=count||0;tabs()}
+async function countPend(){if(!isOficina())return;const[{count},c2]=await Promise.all([sb.from('solicitudes').select('id',{count:'exact',head:true}).eq('estado','Pendiente'),cCountPend().catch(()=>0)]);S.cpend=c2;S.pend=(count||0)+c2;tabs()}
 async function loadDetail(id){
   S.detail=null;render();
   const{data:s,error}=await sb.from('solicitudes').select('*').eq('id',id).single();if(error){toast(errMsg(error));return}
@@ -262,7 +264,7 @@ async function loadDetail(id){
   const{data:log}=await sb.from('bitacora').select('accion,detalle,creado_en').eq('solicitud_id',id).order('creado_en');
   S.detail={s,urls,log:log||[]};render();
 }
-async function loadMine(){const{data}=await sb.from('solicitudes').select('folio,estado,nombres,apellidos,codigo_socio,motivo_rechazo,creado_en').eq('promotor_id',S.session.user.id).order('creado_en',{ascending:false}).limit(50);S.mine=data||[];render()}
+async function loadMine(){const{data}=await sb.from('solicitudes').select('folio,estado,nombres,apellidos,codigo_socio,motivo_rechazo,creado_en').eq('promotor_id',S.session.user.id).order('creado_en',{ascending:false}).limit(50);S.mine=data||[];const{data:dc}=await sb.from('creditos').select('folio,estado,nombres,apellidos,monto_solicitado,plazo_meses,resolucion,creado_en').eq('promotor_id',S.session.user.id).order('creado_en',{ascending:false}).limit(50);S.minec=dc||[];render()}
 async function loadUsuarios(){
   const[p,c,l]=await Promise.all([sb.from('perfiles').select('*').order('creado_en'),sb.rpc('resumen_usuarios'),sb.from('bitacora_usuarios').select('*').order('creado_en',{ascending:false}).limit(15)]);
   if(p.error){toast(errMsg(p.error));return}
@@ -380,7 +382,9 @@ async function togglePush(){
 async function quitarDispositivo(){try{if(!pushSupported())return;const reg=await navigator.serviceWorker.getRegistration();const sub=reg&&await reg.pushManager.getSubscription();if(sub){await sb.from('push_suscripciones').delete().eq('endpoint',sub.endpoint);await sub.unsubscribe()}}catch(e){}}
 function irA(hash){
   const m=hash.match(/solicitud=([0-9a-f-]{36})/);
-  if(m&&isOficina()){S.view='bandeja';S.open=m[1];render();loadDetail(m[1])}
+  const mc=hash.match(/credito=([0-9a-f-]{36})/);
+  if(m&&isOficina()){S.view='bandeja';S.btipo='afil';S.open=m[1];render();loadDetail(m[1])}
+  else if(mc&&isOficina()){S.view='bandeja';S.btipo='creditos';S.copen=mc[1];render();loadCredDetail(mc[1])}
   else if(/envios/.test(hash)){setView('envios')}
   if(hash)history.replaceState(null,'',location.pathname)}
 
@@ -448,16 +452,18 @@ function vNueva(){
 
 function pill(e){return `<span class="pill ${e==='Pendiente'?'p-pend':e==='Aprobada'?'p-ok':e==='Rechazada'?'p-bad':'p-q'}">${esc(e)}</span>`}
 function vEnvios(){
-  const q=S.queue.map(it=>`<div class="card item" style="cursor:default"><b>${esc(it.d.nombres+' '+it.d.apellidos)}</b>${pill(it.error?'Con error':'Sin enviar')}<span class="meta">DNI ${esc(fmtDni(it.d.dni))} · guardada ${fechaHora(it.creado)}${it.error?' · '+esc(it.error):''}</span><span>${it.error?`<button class="btn-sm" data-editq="${esc(it.d.client_id)}">Corregir</button>`:''}</span></div>`).join('');
+  const q=S.queue.map(it=>`<div class="card item" style="cursor:default"><b>${esc(it.kind==='credito'?'Crédito · '+nombreDe(it.d.cli):it.d.nombres+' '+it.d.apellidos)}</b>${pill(it.error?'Con error':'Sin enviar')}<span class="meta">DNI ${esc(fmtDni(it.kind==='credito'?it.d.cli.dni:it.d.dni))} · guardada ${fechaHora(it.creado)}${it.error?' · '+esc(it.error):''}</span><span>${it.error?`<button class="btn-sm" data-editq="${esc(it.d.client_id)}">Corregir</button>`:''}</span></div>`).join('');
   return `<h1>Mis envíos</h1><p class="lead">Solicitudes que usted registró y su estado en la oficina.</p>
   ${S.queue.length?`<h2 style="margin:20px 0 8px">En el teléfono (${S.queue.length})</h2><div class="list">${q}</div><div class="rowbtns"><span class="hint">${navigator.onLine?'Hay señal.':'Sin señal: se enviarán solas al conectarse.'}</span><button class="btn-primary btn-sm" id="syncNow" ${!navigator.onLine||S.syncing?'disabled':''}>${S.syncing?'<span class="spin"></span> Enviando…':'Enviar ahora'}</button></div>`:''}
   <h2 style="margin:22px 0 8px">Recibidas por la oficina</h2>
-  <div class="list">${S.mine.length?S.mine.map(m=>`<div class="card item" style="cursor:default"><b>${esc(m.nombres+' '+m.apellidos)}</b>${pill(m.estado)}<span class="meta"><span class="mono">${esc(m.codigo_socio||m.folio)}</span> · ${fecha(m.creado_en)}${m.motivo_rechazo?' · '+esc(m.motivo_rechazo):''}</span><span></span></div>`).join(''):`<div class="card empty">${navigator.onLine?'Todavía no ha enviado solicitudes.':'Sin señal para consultar.'}</div>`}</div>`;
+  <div class="list">${S.mine.length?S.mine.map(m=>`<div class="card item" style="cursor:default"><b>${esc(m.nombres+' '+m.apellidos)}</b>${pill(m.estado)}<span class="meta"><span class="mono">${esc(m.codigo_socio||m.folio)}</span> · ${fecha(m.creado_en)}${m.motivo_rechazo?' · '+esc(m.motivo_rechazo):''}</span><span></span></div>`).join(''):`<div class="card empty">${navigator.onLine?'Todavía no ha enviado solicitudes.':'Sin señal para consultar.'}</div>`}</div>
+  ${S.minec.length?`<h2 style="margin:22px 0 8px">Solicitudes de crédito</h2><div class="list">${S.minec.map(m=>`<div class="card item" style="cursor:default"><b>${esc(m.nombres+' '+m.apellidos)}</b>${pillC(m.estado)}<span class="meta"><span class="mono">${esc(m.folio)}</span> · ${L(m.monto_solicitado)} · ${m.plazo_meses} m · ${fecha(m.creado_en)}${m.resolucion?.decision==='Aprobado'?' · aprobado '+L(m.resolucion.monto):m.resolucion?.observaciones?' · '+esc(m.resolucion.observaciones):''}</span><span></span></div>`).join('')}</div>`:''}`;
 }
 
 function vBandeja(){
+  if(S.btipo==='creditos')return vBandejaCreditos();
   if(S.open)return vDetalle();
-  return `<h1>Solicitudes recibidas</h1><p class="lead">Revise cada ficha, imprímala para firma y apruébela con el número de acta.</p>
+  return `${vBandejaTipo()}<h1>Solicitudes recibidas</h1><p class="lead">Revise cada ficha, imprímala para firma y apruébela con el número de acta.</p>
   <div class="filters">${['Pendiente','Aprobada','Rechazada','Todas'].map(f=>`<button data-f="${f}" class="${S.filter===f?'on':''}">${f==='Todas'?'Todas':f+'s'}</button>`).join('')}</div>
   <div class="toolbar"><span class="hint">${S.bandeja.length} ${S.bandeja.length===1?'solicitud':'solicitudes'} en esta vista</span>${puedeExportar()?`<div class="grp"><button class="btn-sm" id="xlsBtn">Exportar Excel</button><button class="btn-sm" id="pdfListBtn">Exportar PDF</button></div>`:'<span class="hint">Exportar listados: solo el administrador</span>'}</div>
   <form id="searchF" style="display:flex;gap:8px;margin-bottom:12px"><label for="qBox" class="t" hidden>Buscar</label><input id="qBox" placeholder="Buscar por nombre, DNI o código" value="${esc(S.q)}"><button type="submit">Buscar</button></form>
@@ -564,7 +570,7 @@ function vParams(){
 }
 
 /* ================= Render ================= */
-function tabsFor(){const t=[];if(S.perfil?.activo){t.push(['nueva','Nueva solicitud'],['envios','Mis envíos'+(S.queue.length?` <span class="badge">${S.queue.length}</span>`:'')]);if(isOficina())t.push(['bandeja','Bandeja'+(S.pend?` <span class="badge">${S.pend}</span>`:'')]);if(isAdmin())t.push(['usuarios','Usuarios'],['params','Parámetros'])}return t}
+function tabsFor(){const t=[];if(S.perfil?.activo){t.push(['nueva','Nueva solicitud'],['credito','Crédito'],['envios','Mis envíos'+(S.queue.length?` <span class="badge">${S.queue.length}</span>`:'')]);if(isOficina())t.push(['bandeja','Bandeja'+(S.pend?` <span class="badge">${S.pend}</span>`:'')]);if(isAdmin())t.push(['usuarios','Usuarios'],['params','Parámetros'])}return t}
 function tabs(){$('#tabs').innerHTML=tabsFor().map(([k,l])=>`<button role="tab" data-tab="${k}" aria-selected="${S.view===k}">${l}</button>`).join('')}
 function netbar(){const b=$('#netbar');if(!S.session){b.hidden=true;return}
   if(!navigator.onLine){b.hidden=false;b.textContent='Sin conexión · puede seguir llenando solicitudes; se enviarán al volver la señal'+(S.queue.length?` (${S.queue.length} en espera)`:'')}
@@ -577,12 +583,14 @@ function render(){
   $('#hdr').hidden=false;$('#whoName').textContent=(S.perfil?.nombre||S.session.user.email).split(' ')[0];tabs();netbar();
   if(!S.perfil||!S.perfil.activo){app.innerHTML=vPendiente();return}
   const v=S.view;
-  app.innerHTML=v==='nueva'?vNueva():v==='envios'?vEnvios():v==='bandeja'?vBandeja():v==='usuarios'?vUsuarios():vParams();
+  if(v==='credito')cAbrir();
+  app.innerHTML=v==='credito'?vCredito():v==='nueva'?vNueva():v==='envios'?vEnvios():v==='bandeja'?vBandeja():v==='usuarios'?vUsuarios():vParams();
   if(v==='nueva'&&S.step===STEP_DOCS&&!S.sent&&!S.busy){initSig('#sig','firma','#sigHint');initSig('#sig2','firmaTestigo','#sig2Hint')}
+  if(v==='credito'&&!S.csent&&!S.cbusy)cInitSigs();
 }
 function go(step){S.step=step;S.errors={};render();window.scrollTo({top:0})}
-function setView(v){S.view=v;S.open=null;S.detail=null;S.sent=null;render();window.scrollTo({top:0});
-  if(v==='bandeja')loadBandeja();if(v==='envios'&&navigator.onLine)loadMine();if(v==='usuarios')loadUsuarios();if(v==='params')loadParams().then(render)}
+function setView(v){S.view=v;S.open=null;S.detail=null;S.sent=null;S.copen=null;S.cdetail=null;S.csent=null;render();window.scrollTo({top:0});
+  if(v==='bandeja'){if(S.btipo==='creditos')loadCreditos();else loadBandeja()}if(v==='envios'&&navigator.onLine)loadMine();if(v==='usuarios')loadUsuarios();if(v==='params')loadParams().then(render)}
 
 /* ================= Eventos ================= */
 document.addEventListener('submit',async e=>{
@@ -606,7 +614,7 @@ document.addEventListener('submit',async e=>{
 document.addEventListener('click',async e=>{
   const t=e.target.closest('button');if(!t)return;
   if(t.id==='toReg'){S.authMode='reg';render()} if(t.id==='toLogin'){S.authMode='login';render()}
-  if(t.id==='logout'){const pend=S.queue.length+(S.draft&&S.draft.nombres?1:0);if(pend&&!t.dataset.sure){t.dataset.sure='1';t.textContent=`¿Salir? Se borrará${pend>1?'n':''} ${pend} solicitud${pend>1?'es':''} sin enviar`;setTimeout(()=>{t.textContent='Salir';delete t.dataset.sure},5000);return}await cerrarSesion()}
+  if(t.id==='logout'){const pend=S.queue.length+(S.draft&&S.draft.nombres?1:0)+(S.cdraft&&(S.cdraft.cli.n1||S.cdraft.cond.monto)?1:0);if(pend&&!t.dataset.sure){t.dataset.sure='1';t.textContent=`¿Salir? Se borrará${pend>1?'n':''} ${pend} solicitud${pend>1?'es':''} sin enviar`;setTimeout(()=>{t.textContent='Salir';delete t.dataset.sure},5000);return}await cerrarSesion()}
   if(t.dataset.uf){S.uFilter=t.dataset.uf;S.uAction=null;render()}
   if(t.dataset.usus){S.uAction={id:t.dataset.usus,tipo:'sus'};render();$('#susMotivo')?.focus()}
   if(t.dataset.udel){S.uAction={id:t.dataset.udel,tipo:'del'};render()}
@@ -639,7 +647,7 @@ document.addEventListener('click',async e=>{
   if(t.id==='goEnvios')setView('envios');
   if(t.id==='resetDraft'){if(!t.dataset.sure){t.dataset.sure='1';t.textContent='Toque otra vez para descartar';setTimeout(()=>{t.textContent='Descartar borrador';delete t.dataset.sure},4000);return}S.draft=blankDraft();S.step=0;S.errors={};await idb.set('draft',S.draft);render();toast('Borrador descartado')}
   if(t.id==='syncNow')syncQueue();
-  if(t.dataset.editq){const it=S.queue.find(q=>q.d.client_id===t.dataset.editq);if(it){S.queue=S.queue.filter(q=>q!==it);await saveQueue();S.draft=it.d;saveDraft();S.view='nueva';S.step=0;render();toast('Corrija y vuelva a enviar')}}
+  if(t.dataset.editq){const it=S.queue.find(q=>q.d.client_id===t.dataset.editq);if(it){S.queue=S.queue.filter(q=>q!==it);await saveQueue();if(it.kind==='credito'){S.cdraft=cCompletar(it.d);cSave();S.view='credito';S.cstep=0;S.csent=null}else{S.draft=it.d;saveDraft();S.view='nueva';S.step=0}render();toast('Corrija y vuelva a enviar')}}
   if(t.dataset.f){S.filter=t.dataset.f;loadBandeja()}
   if(t.dataset.open){S.open=t.dataset.open;loadDetail(S.open);window.scrollTo({top:0})}
   if(t.id==='back'){S.open=null;S.detail=null;render();loadBandeja()}
@@ -689,9 +697,9 @@ function initSig(sel,key,hintSel){
 
 /* ================= Sesión segura ================= */
 async function limpiarDispositivo(){
-  try{await idb.set('draft',null);await idb.set('queue',[])}catch(e){}
+  try{await idb.set('draft',null);await idb.set('queue',[]);await idb.set('cdraft',null)}catch(e){}
   try{Object.keys(localStorage).filter(k=>k.startsWith('cacih_')).forEach(k=>localStorage.removeItem(k))}catch(e){}
-  S.draft=null;S.queue=[];S.bandeja=[];S.detail=null;S.mine=[];S.usuarios=[];S.uLog=[];
+  S.draft=null;S.cdraft=null;S.queue=[];S.bandeja=[];S.creditos=[];S.cdetail=null;S.copen=null;S.minec=[];S.detail=null;S.mine=[];S.usuarios=[];S.uLog=[];
   const pr=$('#print');if(pr)pr.innerHTML='';const pa=$('#pdfArea');if(pa)pa.innerHTML=''}
 async function cerrarSesion(motivo){await quitarDispositivo();await limpiarDispositivo();S.motivoSalida=motivo||null;await sb.auth.signOut()}
 let ultimaActividad=Date.now(),avisoInactividad=false;
@@ -714,7 +722,8 @@ async function boot(session){
   if(!session){S.perfil=null;render();return}
   await Promise.all([loadPerfil(),loadParams()]);
   const dr=await idb.get('draft').catch(()=>null);S.draft=dr?completarDraft(dr):blankDraft();
-  S.queue=((await idb.get('queue').catch(()=>null))||[]).map(q=>({...q,d:completarDraft(q.d)}));ultimaActividad=Date.now();
+  S.queue=((await idb.get('queue').catch(()=>null))||[]).map(q=>q.kind==='credito'?{...q,d:cCompletar(q.d)}:{...q,d:completarDraft(q.d)});
+  const cd=await idb.get('cdraft').catch(()=>null);S.cdraft=cd?cCompletar(cd):null;ultimaActividad=Date.now();
   if(isOficina()&&S.view==='nueva'&&!S.draft.nombres){S.view='bandeja';loadBandeja()}
   render();countPend();syncQueue();pushState();
   if(location.hash&&S.perfil?.activo)irA(location.hash);
@@ -732,6 +741,6 @@ setInterval(()=>{syncQueue();if(S.view==='bandeja'&&!S.open&&navigator.onLine)co
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
   navigator.serviceWorker.addEventListener('message',e=>{const m=e.data||{};if(!S.session||!S.perfil?.activo)return;
-    if(m.type==='aviso'){if(m.tipo==='nueva'){countPend();if(S.view==='bandeja'&&!S.open)loadBandeja()}else if(S.view==='envios')loadMine()}
+    if(m.type==='aviso'){if(m.tipo==='nueva'||m.tipo==='credito'){countPend();if(S.view==='bandeja'&&!S.open&&!S.copen){if(S.btipo==='creditos')loadCreditos();else loadBandeja()}}else if(S.view==='envios')loadMine()}
     if(m.type==='navegar'&&m.url)irA(m.url)});
 }
