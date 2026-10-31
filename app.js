@@ -1,7 +1,7 @@
 /* ================= Configuración ================= */
 const SUPABASE_URL='https://yjvhdkwdylrduunkbykw.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlqdmhka3dkeWxyZHV1bmtieWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyNjc1NzQsImV4cCI6MjEwNzg0MzU3NH0.r0b7VfCZIbTuEE7KA0vD-gUVfoZSfJSnyu-sLr-Xv2s';
-const VERSION='1.5.0';
+const VERSION='1.6.0';
 const VAPID_PUBLIC='BKdmYfjnL3uiR_q1sSb18aNBr2QnrcuWiZYZ8qwFTISiMWAzmgXHJcDMeQZGihYobRFfrj2FlSH1oXocK37StQo';
 const LIBS={
   xlsx:'vendor/xlsx.full.min.js',
@@ -38,7 +38,7 @@ const idb={_db:null,
 /* ================= Estado ================= */
 const S={session:null,perfil:null,params:{...DEFAULT_PARAMS},view:'nueva',step:0,errors:{},draft:null,queue:[],sent:null,
   filter:'Pendiente',q:'',bandeja:[],open:null,detail:null,mine:[],usuarios:[],uFilter:'Todos',uCount:{},uLog:[],uAction:null,syncing:false,busy:false,
-  cdraft:null,cstep:0,cerrors:{},csent:null,cbusy:false,btipo:'afil',creditos:[],cfilter:'Pendiente',copen:null,cdetail:null,cres:null,cpend:0,minec:[]};
+  cdraft:null,cstep:0,cerrors:{},csent:null,cbusy:false,btipo:'afil',creditos:[],cfilter:'Pendiente',copen:null,cdetail:null,cres:null,cpend:0,minec:[],sim:null};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const L=n=>'L '+Number(n||0).toLocaleString('es-HN',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -570,7 +570,7 @@ function vParams(){
 }
 
 /* ================= Render ================= */
-function tabsFor(){const t=[];if(S.perfil?.activo){t.push(['nueva','Nueva solicitud'],['credito','Crédito'],['envios','Mis envíos'+(S.queue.length?` <span class="badge">${S.queue.length}</span>`:'')]);if(isOficina())t.push(['bandeja','Bandeja'+(S.pend?` <span class="badge">${S.pend}</span>`:'')]);if(isAdmin())t.push(['usuarios','Usuarios'],['params','Parámetros'])}return t}
+function tabsFor(){const t=[];if(S.perfil?.activo){t.push(['nueva','Nueva solicitud'],['credito','Crédito'],['simulador','Simulador'],['envios','Mis envíos'+(S.queue.length?` <span class="badge">${S.queue.length}</span>`:'')]);if(isOficina())t.push(['bandeja','Bandeja'+(S.pend?` <span class="badge">${S.pend}</span>`:'')]);if(isAdmin())t.push(['usuarios','Usuarios'],['params','Parámetros'])}return t}
 function tabs(){$('#tabs').innerHTML=tabsFor().map(([k,l])=>`<button role="tab" data-tab="${k}" aria-selected="${S.view===k}">${l}</button>`).join('')}
 function netbar(){const b=$('#netbar');if(!S.session){b.hidden=true;return}
   if(!navigator.onLine){b.hidden=false;b.textContent='Sin conexión · puede seguir llenando solicitudes; se enviarán al volver la señal'+(S.queue.length?` (${S.queue.length} en espera)`:'')}
@@ -584,7 +584,7 @@ function render(){
   if(!S.perfil||!S.perfil.activo){app.innerHTML=vPendiente();return}
   const v=S.view;
   if(v==='credito')cAbrir();
-  app.innerHTML=v==='credito'?vCredito():v==='nueva'?vNueva():v==='envios'?vEnvios():v==='bandeja'?vBandeja():v==='usuarios'?vUsuarios():vParams();
+  app.innerHTML=v==='simulador'?vSimulador():v==='credito'?vCredito():v==='nueva'?vNueva():v==='envios'?vEnvios():v==='bandeja'?vBandeja():v==='usuarios'?vUsuarios():vParams();
   if(v==='nueva'&&S.step===STEP_DOCS&&!S.sent&&!S.busy){initSig('#sig','firma','#sigHint');initSig('#sig2','firmaTestigo','#sig2Hint')}
   if(v==='credito'&&!S.csent&&!S.cbusy)cInitSigs();
 }

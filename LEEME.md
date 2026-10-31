@@ -91,6 +91,18 @@ Llega primero un aviso de prueba.
 - Si el navegador bloqueó los avisos, se permiten desde el candado junto a la dirección.
 - Al tocar **Salir**, ese dispositivo deja de recibir avisos.
 
+## Versión 1.6 · Simulador de préstamo
+
+Nueva pestaña **Simulador**: monto, plazo, tasa (mensual o anual), pago mensual o quincenal y método (**cuota nivelada** o **capital fijo**). Muestra la cuota, el total de intereses, el total a pagar, la comparación a 6, 12, 18, 24, 36, 48 y 60 meses, y la tabla de pagos con fechas. Si se escribe el ingreso disponible, avisa cuando la cuota pasa del 40 %.
+
+- **Usar en solicitud de crédito** copia las condiciones al paso 1 del crédito.
+- En el paso 1 del crédito, **Ver tabla de pagos** abre el simulador con esos datos.
+- En la oficina, cada crédito tiene **Plan de pagos** (con las condiciones aprobadas si ya se aprobó).
+- **Descargar PDF** / **Imprimir**: plan de pagos para entregar al cliente.
+
+### Instalar la 1.6
+GitHub → suba `index.html`, `app.js`, `credito.js` y `sw.js`. No hay cambios en Supabase.
+
 ## Versión 1.5 · Solicitud de crédito
 
 Nueva pestaña **Crédito** con el formato "Solicitud de crédito 2025" y la hoja "Datos del fiador solidario". Cualquier persona puede solicitar crédito, sea o no socia; los datos se llenan completos.

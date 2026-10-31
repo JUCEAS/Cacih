@@ -158,6 +158,15 @@ table.plain th{font-size:12px;color:var(--muted);text-transform:uppercase;letter
 .sheet p.q{margin:4px 0;font-size:11.5px}
 .sheet p.legal{font-size:10.5px;line-height:1.4;margin:3px 0;color:#111}
 .sheet .sigs .sn{font-size:11.5px;margin-bottom:4px;font-weight:600}
+.simres .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.simres .kpis>div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.simres .kpis span{font-size:12px;color:var(--muted)}.simres .kpis b{font-size:19px;color:var(--accent)}.simres .kpis small{font-size:11.5px;color:var(--muted)}
+.simres .bar{height:10px;border-radius:6px;background:var(--gold);overflow:hidden;margin-top:14px}.simres .bar i{display:block;height:100%;background:var(--accent)}
+.tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table.amort{width:100%;border-collapse:collapse;font-size:13px}table.amort th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.amort td{padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}table.amort td.num{text-align:right;font-variant-numeric:tabular-nums}
+table.amort tr.tot td{font-weight:700;border-top:2px solid var(--ink)}table.cmp tr.on td{background:var(--accent-soft);font-weight:600}
+.sheet table.amort td{padding:2px 6px;font-size:9.5px}
 @media print{.sheet h4{break-after:avoid}.sheet table{break-inside:avoid}}
 #print{display:none}
 #pdfArea{position:fixed;left:-10000px;top:0;width:816px;background:#fff}
