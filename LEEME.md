@@ -12,7 +12,7 @@ Base de datos: Supabase, proyecto **cacih** (`yjvhdkwdylrduunkbykw`).
 | `index.html` | Pantalla y estilos de la app |
 | `app.js` | Funcionamiento de la app (desde la versión 1.3) |
 | `credito.js` | Solicitud de crédito, fiador solidario y simulador (desde la versión 1.5) |
-| `seguridad.js` | Verificación en dos pasos, PIN, cierre a distancia, modo práctica (desde la versión 1.7) |
+| `seguridad.js` | Crear usuarios, PIN, cierre a distancia, modo práctica (desde la versión 1.7) |
 | `logo-cacih.png`, `logo-icono.png` | Logo de CACIH (desde la versión 1.4) |
 | `vendor/` | Librerías de apoyo, incluidas en la app (6 archivos) |
 | `sw.js` | Permite abrirla sin señal |
@@ -94,15 +94,21 @@ Llega primero un aviso de prueba.
 
 ## Versión 1.7 · Mejoras del análisis
 
-### Instalar la 1.7
+### Instalar la 1.7.1
 1. La base de datos **ya quedó lista**.
 2. GitHub → suba `index.html`, `app.js`, `credito.js`, `sw.js` y **`seguridad.js`** (nuevo).
-3. Abra la app. En *Parámetros* debe decir **1.7.0**.
+3. Abra la app. En *Parámetros* debe decir **1.7.1**.
 
-### Lo primero que verá
-- **Oficina y Administrador:** la app pide activar la **verificación en dos pasos**. Instale Google Authenticator o Microsoft Authenticator, escanee el código QR y escriba el código de 6 dígitos. Desde ahí, cada vez que entre le pedirá el código. Sin él, la base de datos no le muestra nada de la oficina.
-  - Si pierde el teléfono con la app de códigos: Supabase → *Authentication → Users* → su usuario → borre el factor MFA y vuelva a activarlo.
-- **Todos:** la app pide crear un **PIN** de 4 a 6 números. Se pide al abrir la app y al volver después de 3 minutos. Con 5 intentos fallidos se cierra la sesión y se borra lo guardado en el teléfono.
+### Acceso (versión 1.7.1)
+- Se entra **solo con correo y contraseña**. Se quitó la verificación con app de códigos.
+- **PIN en los teléfonos**: apagado por defecto. Se puede activar en *Parámetros → Pedir PIN en los teléfonos*.
+
+### Crear usuarios desde la app
+*Usuarios → + Crear usuario*: nombre, correo, celular, rol y una contraseña temporal (la app la sugiere). La cuenta queda **activa de inmediato** y la app muestra los datos para copiarlos o enviarlos por WhatsApp. La primera vez que la persona entra, la app le pide crear su propia contraseña.
+
+**Restablecer contraseña** (en cada usuario): asigna una contraseña temporal nueva, cierra la app en sus teléfonos y le pide crear una nueva al entrar.
+
+Con esto ya puede **desactivar el registro libre** en Supabase: *Authentication → Sign In / Providers → Allow new users to sign up* = apagado. Así nadie de fuera puede crearse una cuenta.
 
 ### Crédito
 - **Productos de crédito** (*Parámetros*): nombre, tasa, monto mínimo y máximo, plazo máximo. El promotor elige el producto y no puede cambiar la tasa.

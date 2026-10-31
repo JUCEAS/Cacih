@@ -7,39 +7,43 @@
    - Productos de crédito y errores recientes en Parámetros
    ===================================================================== */
 
-/* ---------- Verificación en dos pasos ---------- */
-async function mfaGate(){
-  S.mfa=null;
-  if(!S.perfil?.activo||!['oficina','admin'].includes(S.perfil.rol))return false;
-  try{
-    const{data,error}=await sb.auth.mfa.getAuthenticatorAssuranceLevel();if(error)throw error;
-    if(data.currentLevel==='aal2')return false;
-    const{data:f,error:e2}=await sb.auth.mfa.listFactors();if(e2)throw e2;
-    const ver=(f?.totp||[]).find(x=>x.status==='verified');
-    S.mfa=ver?{modo:'reto',factorId:ver.id}:{modo:'alta'};
-  }catch(e){S.mfa={modo:'sinred',error:errMsg(e)}}
-  return true}
-function vMfa(){const m=S.mfa;
-  if(m.modo==='sinred')return `<div class="auth card"><h2>Verificación en dos pasos</h2><p class="lead">Se necesita conexión a internet para verificar su identidad.</p><p class="hint">${esc(m.error||'')}</p><div class="rowbtns"><button class="btn-primary" id="mfaReintentar">Reintentar</button></div></div>`;
-  if(m.modo==='reto')return `<div class="auth card"><h2>Verificación en dos pasos</h2><p class="lead">Abra la app de autenticación de su teléfono (Google Authenticator o Microsoft Authenticator) y escriba el código de 6 dígitos de <b>CACIH</b>.</p>
-    <form id="mfaForm"><div class="f"><label class="t" for="mfaCode">Código</label><input id="mfaCode" class="mono" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" style="font-size:24px;letter-spacing:.3em;text-align:center"></div><span class="err" id="mfaErr"></span><div class="rowbtns"><button class="btn-primary" type="submit" id="mfaGo">Verificar</button></div></form>
-    <p class="hint" style="margin-top:16px">¿Perdió el teléfono con la app de códigos? Pida al administrador del sistema que le quite la verificación en Supabase (Authentication → Users → su usuario → borrar el factor MFA).</p></div>`;
-  return `<div class="auth card"><h2>Active la verificación en dos pasos</h2><p class="lead">Su cuenta ve los documentos de identidad de todos los clientes. Además de la contraseña, pediremos un código que cambia cada 30 segundos.</p>
-    <ol class="pasos"><li>Instale en su teléfono <b>Google Authenticator</b> o <b>Microsoft Authenticator</b> (gratis, en la tienda de apps).</li><li>Toque <b>Generar código QR</b> y escanéelo con esa app.</li><li>Escriba aquí el código de 6 dígitos que le muestra.</li></ol>
-    ${m.qr?`<div style="text-align:center;margin:12px 0"><img src="${esc(m.qr)}" alt="Código QR para la app de autenticación" width="200" height="200" style="background:#fff;padding:8px;border-radius:8px"><p class="hint">¿No puede escanear? Escriba esta clave en la app: <span class="mono" style="word-break:break-all">${esc(m.secret)}</span></p></div>
-    <form id="mfaForm"><div class="f"><label class="t" for="mfaCode">Código de 6 dígitos</label><input id="mfaCode" class="mono" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" style="font-size:24px;letter-spacing:.3em;text-align:center"></div><span class="err" id="mfaErr"></span><div class="rowbtns"><button class="btn-primary" type="submit" id="mfaGo">Activar</button></div></form>`
-    :`<div class="rowbtns"><span class="err" id="mfaErr"></span><button class="btn-primary" id="mfaQr">Generar código QR</button></div>`}</div>`}
-async function mfaAlta(btn){btn.disabled=true;btn.innerHTML='<span class="spin"></span>';
-  try{const{data:f}=await sb.auth.mfa.listFactors();for(const x of(f?.all||[]).filter(x=>x.status!=='verified'))await sb.auth.mfa.unenroll({factorId:x.id});
-    const{data,error}=await sb.auth.mfa.enroll({factorType:'totp',friendlyName:'CACIH '+new Date().toISOString().slice(0,16)});if(error)throw error;
-    S.mfa={modo:'alta',factorId:data.id,qr:data.totp.qr_code,secret:data.totp.secret};render()}
-  catch(e){const er=$('#mfaErr');if(er)er.textContent=errMsg(e);btn.disabled=false;btn.textContent='Generar código QR'}}
-async function mfaVerificar(){const code=($('#mfaCode').value||'').replace(/\D/g,''),er=$('#mfaErr'),b=$('#mfaGo');er.textContent='';
-  if(code.length!==6){er.textContent='Escriba los 6 dígitos.';return}
-  b.disabled=true;b.innerHTML='<span class="spin"></span>';
-  const{error}=await sb.auth.mfa.challengeAndVerify({factorId:S.mfa.factorId,code});
-  if(error){er.textContent=/invalid|expired/i.test(error.message)?'Código incorrecto o vencido. Escriba el código que aparece ahora.':errMsg(error);b.disabled=false;b.textContent='Verificar';return}
-  const{data:{session}}=await sb.auth.getSession();S.mfa=null;toast('Identidad verificada');await boot(session)}
+/* ---------- Cambio de contraseña obligatorio (cuentas creadas o restablecidas por el administrador) ---------- */
+function vCambiarClave(){return `<div class="auth card"><h2>Cree su contraseña</h2><p class="lead">El administrador le dio una contraseña temporal. Cámbiela por una que solo usted conozca.</p>
+  <form id="claveForm"><div class="f"><label class="t" for="cc1">Contraseña nueva</label><input id="cc1" type="password" autocomplete="new-password"></div>
+  <div class="f"><label class="t" for="cc2">Repita la contraseña</label><input id="cc2" type="password" autocomplete="new-password"></div>
+  <p class="hint">Al menos 10 caracteres, con letras y números.</p><span class="err" id="ccErr"></span><div class="rowbtns"><button class="btn-primary" type="submit" id="ccGo">Guardar contraseña</button></div></form></div>`}
+async function guardarClave(){const a=$('#cc1').value,b=$('#cc2').value,er=$('#ccErr'),bt=$('#ccGo');er.textContent='';
+  if(a.length<10||!/[A-Za-z]/.test(a)||!/\d/.test(a)){er.textContent='La contraseña debe tener al menos 10 caracteres, con letras y números.';return}
+  if(a!==b){er.textContent='Las dos contraseñas no coinciden.';return}
+  bt.disabled=true;bt.innerHTML='<span class="spin"></span>';
+  const{data,error}=await sb.auth.updateUser({password:a,data:{cambiar_clave:false}});
+  if(error){er.textContent=/same|different/i.test(error.message)?'Use una contraseña distinta a la temporal.':errMsg(error);bt.disabled=false;bt.textContent='Guardar contraseña';return}
+  S.cambiarClave=false;if(data?.user)S.session.user=data.user;toast('Contraseña guardada');await boot(S.session)}
+
+/* ---------- Crear usuarios y restablecer contraseñas (Administrador) ---------- */
+function claveTemporal(){const L='abcdefghjkmnpqrstuvwxyz',N='23456789',r=n=>crypto.getRandomValues(new Uint32Array(1))[0]%n;
+  let s='Cacih-';for(let i=0;i<4;i++)s+=N[r(N.length)];s+='-';for(let i=0;i<3;i++)s+=L[r(L.length)];return s}
+function vNuevoUsuario(){const n=S.nuevoU;if(!n)return `<div class="rowbtns" style="justify-content:flex-start;margin:6px 0 14px"><button class="btn-primary" id="uNuevo">+ Crear usuario</button></div>`;
+  if(n.listo)return `<div class="card" style="margin-bottom:14px;border-color:var(--accent-2)"><h3>Usuario creado y activo</h3><p>Entregue estos datos a <b>${esc(n.nombre)}</b>. Al entrar por primera vez, la app le pedirá cambiar la contraseña.</p>
+    <table class="plain"><tr><td style="color:var(--muted)">Dirección de la app</td><td class="mono">${esc(location.origin+location.pathname)}</td></tr><tr><td style="color:var(--muted)">Correo</td><td class="mono">${esc(n.email)}</td></tr><tr><td style="color:var(--muted)">Contraseña temporal</td><td class="mono"><b>${esc(n.clave)}</b></td></tr><tr><td style="color:var(--muted)">Rol</td><td>${esc(rolNombre(n.rol))}</td></tr></table>
+    <div class="rowbtns"><button id="uCopiar">Copiar datos</button><button class="btn-wa" id="uWa">Enviar por WhatsApp</button><button class="btn-primary" id="uListo">Listo</button></div></div>`;
+  return `<form class="card" id="uNuevoF" style="margin-bottom:14px"><h3>Crear usuario</h3><div class="grid" style="margin-top:10px">
+    <div class="f"><label class="t" for="nu_nombre">Nombre completo</label><input id="nu_nombre" value="${esc(n.nombre)}" autocomplete="off"></div>
+    <div class="f"><label class="t" for="nu_email">Correo</label><input id="nu_email" type="email" value="${esc(n.email)}" autocomplete="off"></div>
+    <div class="f"><label class="t" for="nu_cel">Celular (para enviarle sus datos)</label><input id="nu_cel" inputmode="tel" value="${esc(n.cel||'')}" placeholder="Opcional"></div>
+    <div class="f"><label class="t" for="nu_rol">Rol</label><select id="nu_rol">${['promotor','oficina','admin'].map(r=>`<option value="${r}" ${n.rol===r?'selected':''}>${rolNombre(r)}</option>`).join('')}</select></div>
+    <div class="f full"><label class="t" for="nu_clave">Contraseña temporal</label><div style="display:flex;gap:8px"><input id="nu_clave" class="mono" value="${esc(n.clave)}" autocomplete="off"><button type="button" class="btn-sm" id="nuOtra">Generar otra</button></div><span class="hint">La persona la cambia al entrar por primera vez.</span></div></div>
+    <div class="rowbtns"><span class="err" id="nuErr"></span><button type="button" class="btn-sm" id="uCancelar">Cancelar</button><button class="btn-primary" type="submit" id="nuGo">Crear y activar</button></div></form>`}
+const rolNombre=r=>r==='admin'?'Administrador':r==='oficina'?'Oficina':'Promotor';
+function vClaveUsuario(u){const c=S.uClave;if(!c||c.id!==u.user_id)return '';
+  if(c.listo)return `<div class="note" style="margin-top:12px">Nueva contraseña temporal de ${esc(u.nombre||u.email)}: <b class="mono">${esc(c.clave)}</b>. Su app se cerró en sus teléfonos; al entrar con esta contraseña deberá crear una nueva. <div class="actions"><button class="btn-sm" id="ucCopiar">Copiar</button><button class="btn-sm btn-wa" id="ucWa">WhatsApp</button><button class="btn-sm" data-ucancel>Cerrar</button></div></div>`;
+  return `<div class="actions" style="border-top:1px solid var(--line);padding-top:12px"><div class="f" style="flex:1;min-width:200px"><label class="t" for="ucClave">Contraseña temporal</label><input id="ucClave" class="mono" value="${esc(c.clave)}"></div><button class="btn-primary" data-uclaveok="${u.user_id}">Asignar</button><button class="btn-sm" data-ucancel>Cancelar</button></div><span class="err" id="ucErr"></span>`}
+async function llamarUsuarios(body){const{data,error}=await sb.functions.invoke('usuarios',{body});
+  if(error){let m=error.message;try{const j=await error.context.json();if(j?.error)m=j.error}catch(e){}throw new Error(m)}
+  if(data?.error)throw new Error(data.error);return data}
+const textoAcceso=(nombre,email,clave)=>`Hola ${nombre}. Su acceso a la app de CACIH:\n${location.origin+location.pathname}\nCorreo: ${email}\nContraseña temporal: ${clave}\nAl entrar, la app le pedirá crear su propia contraseña.`;
+function waLink(cel,txt){const c=String(cel||'').replace(/\D/g,'');return `https://wa.me/${c.length===8?'504'+c:c}?text=${encodeURIComponent(txt)}`}
+async function copiar(txt){try{await navigator.clipboard.writeText(txt);toast('Copiado')}catch(e){toast('No se pudo copiar; selecciónelo a mano')}}
 
 /* ---------- PIN del teléfono ---------- */
 const PIN_KEY='cacih_pin',PIN_FALLOS='cacih_pin_fallos',PIN_MINUTOS=3,PIN_MAX_FALLOS=5;
@@ -58,10 +62,10 @@ function pinPantalla(modo){if(!window.crypto?.subtle)return;
     ${nuevo?'':'<button class="btn-sm" id="pinOlvido" style="margin-top:14px">Olvidé mi PIN</button>'}</div>`;
   el.dataset.modo=modo;setTimeout(()=>{const i=$('#pinIn');if(i)i.focus()},50)}
 function pinQuitar(){pinBloqueado=false;const el=$('#lock');if(el){el.hidden=true;el.innerHTML=''}document.body.classList.remove('locked')}
-function pinArranque(){if(!S.session||!S.perfil?.activo||S.mfa)return;pinPantalla(pinGuardado()?'pedir':'nuevo')}
+function pinArranque(){if(!S.session||!S.perfil?.activo||S.cambiarClave)return;if(!S.params.pedir_pin){pinQuitar();return}pinPantalla(pinGuardado()?'pedir':'nuevo')}
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden){ocultoDesde=Date.now();return}
-  if(ocultoDesde&&S.session&&S.perfil?.activo&&!S.mfa&&!pinBloqueado&&pinGuardado()&&Date.now()-ocultoDesde>PIN_MINUTOS*60000)pinPantalla('pedir');
+  if(ocultoDesde&&S.session&&S.perfil?.activo&&S.params.pedir_pin&&!S.cambiarClave&&!pinBloqueado&&pinGuardado()&&Date.now()-ocultoDesde>PIN_MINUTOS*60000)pinPantalla('pedir');
   ocultoDesde=null;buscarVersion()});
 document.addEventListener('submit',async e=>{
   if(e.target.id==='pinForm'){e.preventDefault();const el=$('#lock'),pin=$('#pinIn').value,er=$('#pinErr');er.textContent='';
@@ -76,7 +80,8 @@ document.addEventListener('submit',async e=>{
     let n=0;try{n=Number(localStorage.getItem(PIN_FALLOS)||0)+1;localStorage.setItem(PIN_FALLOS,String(n))}catch(x){}
     if(n>=PIN_MAX_FALLOS){pinQuitar();await cerrarSesion('Se cerró la sesión y se borraron los datos del teléfono por intentos fallidos de PIN.');return}
     er.textContent=`PIN incorrecto. Le quedan ${PIN_MAX_FALLOS-n} intento${PIN_MAX_FALLOS-n===1?'':'s'}.`;$('#pinIn').value=''}
-  if(e.target.id==='mfaForm'){e.preventDefault();mfaVerificar()}
+  if(e.target.id==='claveForm'){e.preventDefault();guardarClave()}
+  if(e.target.id==='uNuevoF'){e.preventDefault();crearUsuario()}
 });
 
 /* ---------- Cierre de sesiones a distancia ---------- */
@@ -135,8 +140,16 @@ document.addEventListener('click',async e=>{const t=e.target.closest('button');i
   if(t.id==='actualizarApp'){t.disabled=true;location.reload();return}
   if(t.id==='pinOlvido'){if(!t.dataset.sure){t.dataset.sure='1';t.textContent='Se cerrará la sesión y se borrará lo no enviado. Toque otra vez.';return}pinQuitar();await cerrarSesion('Entre de nuevo con su correo y contraseña, y cree un PIN nuevo.');return}
   if(!S.session)return;
-  if(t.id==='mfaQr')mfaAlta(t);
-  if(t.id==='mfaReintentar'){await boot(S.session)}
+  if(t.id==='uNuevo'){S.nuevoU={nombre:'',email:'',cel:'',rol:'promotor',clave:claveTemporal()};S.uAction=null;S.uClave=null;render();setTimeout(()=>$('#nu_nombre')?.focus(),30)}
+  if(t.id==='uCancelar'||t.id==='uListo'){S.nuevoU=null;render()}
+  if(t.id==='nuOtra'){leerNuevo();S.nuevoU.clave=claveTemporal();render()}
+  if(t.id==='uCopiar'){const n=S.nuevoU;copiar(textoAcceso(n.nombre,n.email,n.clave))}
+  if(t.id==='uWa'){const n=S.nuevoU;window.open(waLink(n.cel,textoAcceso(n.nombre,n.email,n.clave)),'_blank','noopener')}
+  if(t.dataset.uclave){S.uClave={id:t.dataset.uclave,clave:claveTemporal()};S.uAction=null;S.nuevoU=null;render()}
+  if(t.dataset.uclaveok){const clave=$('#ucClave').value.trim(),er=$('#ucErr');er.textContent='';if(clave.length<10||!/[A-Za-z]/.test(clave)||!/\d/.test(clave)){er.textContent='Al menos 10 caracteres, con letras y números.';return}
+    t.disabled=true;t.innerHTML='<span class="spin"></span>';try{await llamarUsuarios({accion:'clave',user_id:t.dataset.uclaveok,clave});S.uClave={id:t.dataset.uclaveok,clave,listo:true};render();loadUsuarios()}catch(x){er.textContent=errMsg(x);t.disabled=false;t.textContent='Asignar'}}
+  if(t.id==='ucCopiar'||t.id==='ucWa'){const u=S.usuarios.find(v=>v.user_id===S.uClave.id)||{},txt=textoAcceso(u.nombre||'',u.email||'',S.uClave.clave);if(t.id==='ucCopiar')copiar(txt);else window.open(waLink('',txt),'_blank','noopener')}
+  if(t.dataset.ucancel!==undefined){S.uClave=null;render()}
   if(t.id==='practicaBtn'){S.practica=!S.practica;try{localStorage.setItem('cacih_practica',S.practica?'1':'0')}catch(x){}practicaUI();render();toast(S.practica?'Modo práctica activado: nada se envía a la oficina':'Modo práctica desactivado',4000)}
   if(t.dataset.urev){if(!t.dataset.sure){t.dataset.sure='1';t.textContent='¿Confirmar cierre?';setTimeout(()=>{t.textContent='Cerrar sesiones';delete t.dataset.sure},4000);return}
     t.disabled=true;const{error}=await sb.rpc('revocar_sesiones',{p_id:t.dataset.urev});if(error){toast(errMsg(error),5000);t.disabled=false;return}
@@ -152,3 +165,12 @@ document.addEventListener('click',async e=>{const t=e.target.closest('button');i
 });
 document.addEventListener('input',e=>{const el=e.target;if(el.dataset.prod!==undefined&&S.prodEdit)S.prodEdit[+el.dataset.prod][el.dataset.pk]=el.value});
 document.addEventListener('change',e=>{const el=e.target;if(el.dataset.prod!==undefined&&S.prodEdit&&el.tagName==='SELECT')S.prodEdit[+el.dataset.prod][el.dataset.pk]=el.value});
+
+function leerNuevo(){const n=S.nuevoU;if(!n||n.listo)return;for(const k of['nombre','email','cel','rol','clave']){const el=$('#nu_'+k);if(el)n[k]=el.value.trim()}}
+async function crearUsuario(){leerNuevo();const n=S.nuevoU,er=$('#nuErr'),b=$('#nuGo');er.textContent='';
+  if(n.nombre.length<3){er.textContent='Escriba el nombre completo.';return}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(n.email)){er.textContent='Revise el correo.';return}
+  if(n.clave.length<10||!/[A-Za-z]/.test(n.clave)||!/\d/.test(n.clave)){er.textContent='La contraseña temporal debe tener al menos 10 caracteres, con letras y números.';return}
+  b.disabled=true;b.innerHTML='<span class="spin"></span> Creando…';
+  try{await llamarUsuarios({accion:'crear',nombre:n.nombre,email:n.email.toLowerCase(),rol:n.rol,clave:n.clave});n.listo=true;render();loadUsuarios();toast('Usuario creado y activo')}
+  catch(x){er.textContent=errMsg(x);b.disabled=false;b.textContent='Crear y activar'}}

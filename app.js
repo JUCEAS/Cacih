@@ -1,7 +1,7 @@
 /* ================= Configuración ================= */
 const SUPABASE_URL='https://yjvhdkwdylrduunkbykw.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlqdmhka3dkeWxyZHV1bmtieWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyNjc1NzQsImV4cCI6MjEwNzg0MzU3NH0.r0b7VfCZIbTuEE7KA0vD-gUVfoZSfJSnyu-sLr-Xv2s';
-const VERSION='1.7.0';
+const VERSION='1.7.1';
 const VAPID_PUBLIC='BKdmYfjnL3uiR_q1sSb18aNBr2QnrcuWiZYZ8qwFTISiMWAzmgXHJcDMeQZGihYobRFfrj2FlSH1oXocK37StQo';
 const LIBS={
   xlsx:'vendor/xlsx.full.min.js',
@@ -554,16 +554,17 @@ function vUsuarios(){
       <span class="pill ${e==='Activo'?'p-ok':e==='Suspendido'?'p-bad':'p-pend'}">${e==='Pendiente'?'Pendiente de activar':e}</span></div>
     ${me?'':`<div class="actions" style="margin-top:10px">
       <div class="f" style="width:170px"><label class="t" for="rol_${u.user_id}">Rol</label><select id="rol_${u.user_id}" data-urol="${u.user_id}">${['promotor','oficina','admin'].map(r=>`<option value="${r}" ${u.rol===r?'selected':''}>${r==='admin'?'Administrador':r==='oficina'?'Oficina':'Promotor'}</option>`).join('')}</select></div>
-      ${u.user_id!==S.session.user.id?`<button data-urev="${u.user_id}" title="Cierra la app en todos sus teléfonos y borra lo guardado en ellos">Cerrar sesiones</button>`:''}${e==='Activo'?`<button class="btn-bad" data-usus="${u.user_id}">Suspender</button>`:`<button class="btn-primary" data-uact="${u.user_id}">${e==='Suspendido'?'Reactivar':'Activar'}</button>`}
+      ${u.user_id!==S.session.user.id?`<button data-urev="${u.user_id}" title="Cierra la app en todos sus teléfonos y borra lo guardado en ellos">Cerrar sesiones</button><button data-uclave="${u.user_id}">Restablecer contraseña</button>`:''}${e==='Activo'?`<button class="btn-bad" data-usus="${u.user_id}">Suspender</button>`:`<button class="btn-primary" data-uact="${u.user_id}">${e==='Suspendido'?'Reactivar':'Activar'}</button>`}
       ${e!=='Activo'?`<button class="btn-bad" data-udel="${u.user_id}" ${hist?'disabled title="Tiene historial: solo se puede suspender"':''}>Eliminar</button>`:''}
     </div>
     ${open&&S.uAction.tipo==='sus'?`<div class="actions" style="border-top:1px solid var(--line);padding-top:12px"><div class="f" style="flex:1;min-width:200px"><label class="t" for="susMotivo">Motivo de la suspensión</label><input id="susMotivo" placeholder="Ej. ya no labora con la caja"></div><button class="btn-bad" data-ususok="${u.user_id}">Confirmar suspensión</button><button class="btn-sm" data-ucancel>Cancelar</button></div><p class="hint" style="margin:6px 0 0">Pierde el acceso de inmediato y deja de recibir avisos. Sus solicitudes y su historial se conservan.</p>`:''}
-    ${open&&S.uAction.tipo==='del'?`<div class="warnnote" style="margin-top:12px">¿Eliminar definitivamente la cuenta de ${esc(u.email)}? No se puede deshacer. <div class="actions"><button class="btn-bad" data-udelok="${u.user_id}">Sí, eliminar</button><button class="btn-sm" data-ucancel>Cancelar</button></div></div>`:''}`}
+    ${vClaveUsuario(u)}${open&&S.uAction.tipo==='del'?`<div class="warnnote" style="margin-top:12px">¿Eliminar definitivamente la cuenta de ${esc(u.email)}? No se puede deshacer. <div class="actions"><button class="btn-bad" data-udelok="${u.user_id}">Sí, eliminar</button><button class="btn-sm" data-ucancel>Cancelar</button></div></div>`:''}`}
     </div>`};
   return `<h1>Usuarios</h1><p class="lead">Promotor: registra solicitudes. Oficina: aprueba, imprime y exporta. Administrador: además gestiona usuarios y parámetros.</p>
+  ${vNuevoUsuario()}
   <div class="filters">${['Pendiente','Activo','Suspendido','Todos'].map(f=>`<button data-uf="${f}" class="${S.uFilter===f?'on':''}">${f==='Todos'?'Todos':f==='Pendiente'?'Por activar':f+'s'}${f!=='Todos'?' · '+n(f):''}</button>`).join('')}</div>
   <div class="list">${lista.length?lista.map(card).join(''):`<div class="card empty">No hay usuarios en este grupo.</div>`}</div>
-  <div class="note" style="margin-top:16px"><b>¿Alguien dejó de trabajar con la caja?</b> Use <b>Suspender</b>: pierde el acceso al momento y se conserva todo lo que registró. <b>Eliminar</b> solo está disponible para cuentas sin solicitudes, por ejemplo las creadas por error. Si alguien olvida su contraseña, restablézcala en el panel de Supabase (Authentication → Users).</div>
+  <div class="note" style="margin-top:16px"><b>¿Alguien dejó de trabajar con la caja?</b> Use <b>Suspender</b>: pierde el acceso al momento y se conserva todo lo que registró. <b>Eliminar</b> solo está disponible para cuentas sin solicitudes, por ejemplo las creadas por error. Si alguien olvida su contraseña, use <b>Restablecer contraseña</b>: le asigna una temporal y la app le pide crear una nueva.</div>
   ${S.uLog&&S.uLog.length?`<h2 style="margin:22px 0 8px">Últimos cambios</h2><ul class="log">${S.uLog.map(l=>`<li>${fechaHora(l.creado_en)} · ${esc(l.accion)} · ${esc(l.email_afectado||'')}${l.detalle?' · '+esc(l.detalle):''}</li>`).join('')}</ul>`:''}`;
 }
 function vParams(){
@@ -576,6 +577,7 @@ function vParams(){
   <div class="param"><div><label class="t" for="p_acepta_menores">Aceptar socios menores de edad</label><p>Ahorro infantil; exige datos del tutor.</p></div><select id="p_acepta_menores" data-p="acepta_menores"><option value="true" ${p.acepta_menores?'selected':''}>Sí</option><option value="false" ${!p.acepta_menores?'selected':''}>No</option></select></div>
   <div class="param"><div><label class="t" for="p_exportar_solo_admin">Quién puede exportar listados</label><p>Excel y PDF con los datos de todos los socios. Cada exportación queda registrada.</p></div><select id="p_exportar_solo_admin" data-p="exportar_solo_admin"><option value="true" ${p.exportar_solo_admin!==false?'selected':''}>Solo el administrador</option><option value="false" ${p.exportar_solo_admin===false?'selected':''}>Oficina y administrador</option></select></div>
   ${P('minutos_inactividad','Cierre de sesión por inactividad (minutos)','Para Oficina y Administrador. Entre 5 y 120.')}
+  <div class="param"><div><label class="t" for="p_pedir_pin">Pedir PIN en los teléfonos</label><p>Un PIN de 4 a 6 números para abrir la app. Protege las fotos de identidad si se pierde un teléfono.</p></div><select id="p_pedir_pin" data-p="pedir_pin"><option value="false" ${!p.pedir_pin?'selected':''}>No, solo la contraseña</option><option value="true" ${p.pedir_pin?'selected':''}>Sí, pedir PIN</option></select></div>
   ${P('limite_cuota_ingreso','Límite cuota / ingreso disponible (%)','La app avisa cuando la cuota pasa de este porcentaje. Entre 10 y 100.')}
   <div class="rowbtns"><span class="hint">Versión de la app ${VERSION}</span><button class="btn-primary" type="submit">Guardar parámetros</button></div></form>${vProductos()}${vErrores()}`;
 }
@@ -592,7 +594,7 @@ function render(){
   const app=$('#app');
   if(!S.session){$('#hdr').hidden=true;app.innerHTML=vAuth(S.authMode||'login');return}
   $('#hdr').hidden=false;$('#whoName').textContent=(S.perfil?.nombre||S.session.user.email).split(' ')[0];tabs();netbar();
-  if(S.mfa){$('#tabs').innerHTML='';app.innerHTML=vMfa();return}
+  if(S.cambiarClave){$('#tabs').innerHTML='';app.innerHTML=vCambiarClave();return}
   if(!S.perfil||!S.perfil.activo){app.innerHTML=vPendiente();return}
   const v=S.view;
   if(v==='credito')cAbrir();
@@ -617,7 +619,7 @@ document.addEventListener('submit',async e=>{
       else{const{error}=await sb.auth.signInWithPassword({email,password:pass});if(error)throw error}}
     catch(x){er.textContent=errMsg(x);b.disabled=false;b.textContent=S.authMode==='reg'?'Crear cuenta':'Entrar'}}
   if(f.id==='searchF'){S.q=$('#qBox').value;loadBandeja()}
-  if(f.id==='paramsF'){const p={};f.querySelectorAll('[data-p]').forEach(el=>{const k=el.dataset.p;p[k]=(k==='acepta_menores'||k==='exportar_solo_admin')?el.value==='true':(el.type==='number'?Number(el.value):el.value.trim())});
+  if(f.id==='paramsF'){const p={};f.querySelectorAll('[data-p]').forEach(el=>{const k=el.dataset.p;p[k]=(k==='acepta_menores'||k==='exportar_solo_admin'||k==='pedir_pin')?el.value==='true':(el.type==='number'?Number(el.value):el.value.trim())});
     if(['inscripcion','aportacion','ahorro_min'].some(k=>!(p[k]>=0))){toast('Revise los montos.');return}
     if(!(p.minutos_inactividad>=5&&p.minutos_inactividad<=120)){toast('El cierre por inactividad debe estar entre 5 y 120 minutos.');return}
     p.actualizado_en=new Date().toISOString();const{error}=await sb.from('parametros').update(p).eq('id',1);if(error){toast(errMsg(error));return}
@@ -735,7 +737,7 @@ async function boot(session){
   if(!session){S.perfil=null;render();return}
   await Promise.all([loadPerfil(),loadParams()]);
   if(await revisarRevocacion())return;
-  if(await mfaGate()){render();return}
+  S.cambiarClave=!!(S.perfil?.activo&&S.session.user.user_metadata?.cambiar_clave);if(S.cambiarClave){render();return}
   const dr=await idb.get('draft').catch(()=>null);S.draft=dr?completarDraft(dr):blankDraft();
   S.queue=((await idb.get('queue').catch(()=>null))||[]).map(q=>q.kind==='credito'?{...q,d:cCompletar(q.d)}:{...q,d:completarDraft(q.d)});
   const cd=await idb.get('cdraft').catch(()=>null);S.cdraft=cd?cCompletar(cd):null;ultimaActividad=Date.now();
