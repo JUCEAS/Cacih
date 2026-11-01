@@ -1,7 +1,7 @@
 /* ================= Configuración ================= */
 const SUPABASE_URL='https://yjvhdkwdylrduunkbykw.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlqdmhka3dkeWxyZHV1bmtieWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyNjc1NzQsImV4cCI6MjEwNzg0MzU3NH0.r0b7VfCZIbTuEE7KA0vD-gUVfoZSfJSnyu-sLr-Xv2s';
-const VERSION='1.8.0';
+const VERSION='1.9.0';
 const VAPID_PUBLIC='BKdmYfjnL3uiR_q1sSb18aNBr2QnrcuWiZYZ8qwFTISiMWAzmgXHJcDMeQZGihYobRFfrj2FlSH1oXocK37StQo';
 const LIBS={
   xlsx:'vendor/xlsx.full.min.js',
@@ -284,6 +284,26 @@ async function loadParams(){const{data}=await sb.from('parametros').select('*').
 
 /* ================= Exportar Excel y PDF ================= */
 const puedeExportar=()=>isAdmin()||(isOficina()&&!S.params.exportar_solo_admin);
+/* ===== Descargar o compartir por WhatsApp (WhatsApp o WhatsApp Business) =====
+   S.compartir={titulo,texto,cel,ref} antes de exportar => el archivo se comparte en vez de descargarse. */
+const XLSX_MIME='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+function descargarBlob(blob,nombre){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nombre;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},3000)}
+function waURL(cel,texto){const c=String(cel||'').replace(/\D/g,'');return `https://wa.me/${c.length===8?'504'+c:c}${texto?'?text='+encodeURIComponent(texto):''}`}
+async function entregarArchivo(blob,nombre,mime){const sh=S.compartir;S.compartir=null;
+  if(!sh){descargarBlob(blob,nombre);return false}
+  registrarExport('WhatsApp',(sh.ref||nombre).slice(0,120),sh.cantidad||1).catch(()=>{});
+  // Compartir exige un toque reciente: si el archivo tardó en generarse, se pide un toque más.
+  if(navigator.userActivation&&!navigator.userActivation.isActive){barraCompartir(blob,nombre,mime,sh);return true}
+  await ejecutarCompartir(blob,nombre,mime,sh);return true}
+async function ejecutarCompartir(blob,nombre,mime,sh){const file=new File([blob],nombre,{type:mime});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{await navigator.share({files:[file],title:sh.titulo||'CACIH',text:sh.texto||''});toast('Compartido');return}catch(e){if(e.name==='AbortError'){toast('Envío cancelado');return}}}
+  descargarBlob(blob,nombre);window.open(waURL(sh.cel,(sh.texto||'')+(sh.texto?'\n\n':'')+'(Adjunto: '+nombre+')'),'_blank','noopener');
+  toast('El archivo se descargó. En WhatsApp toque el clip 📎 y adjúntelo desde Descargas.',9000)}
+function barraCompartir(blob,nombre,mime,sh){let b=$('#shareBar');if(!b){b=document.createElement('div');b.id='shareBar';b.className='updbar';document.body.appendChild(b)}
+  b.innerHTML=`<span>Listo: <b>${esc(nombre)}</b></span><div style="display:flex;gap:8px"><button class="btn-sm" id="shareNo">Cancelar</button><button class="btn-wa btn-sm" id="shareSi">Enviar por WhatsApp</button></div>`;
+  $('#shareSi').onclick=async()=>{b.remove();await ejecutarCompartir(blob,nombre,mime,sh)};$('#shareNo').onclick=()=>b.remove()}
+function compartirTexto(cel,texto){window.open(waURL(cel,texto),'_blank','noopener')}
 async function registrarExport(tipo,filtro,cantidad){const{error}=await sb.rpc('registrar_exportacion',{p_tipo:tipo,p_filtro:filtro,p_cantidad:cantidad});if(error)throw error}
 const filtroTxt=()=>S.filter+(S.q?' · búsqueda: '+S.q:'');
 async function fetchExport(){
@@ -322,7 +342,7 @@ async function exportExcel(btn){
     const res=XLSX.utils.aoa_to_sheet([['CACIH · '+S.params.lema],['Exportado',new Date().toLocaleString('es-HN')],['Filtro',S.filter+(S.q?' · búsqueda: '+S.q:'')],[],['Estado','Solicitudes'],['Pendientes',tot.Pendiente],['Aprobadas',tot.Aprobada],['Rechazadas',tot.Rechazada],['Total',rows.length],[],['Ahorro inicial de aprobadas (L)',ahorro]]);
     res['!cols']=[{wch:34},{wch:28}];
     const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Solicitudes');XLSX.utils.book_append_sheet(wb,res,'Resumen');
-    XLSX.writeFile(wb,exportName('xlsx'));toast(rows.length+' solicitudes exportadas a Excel')}
+    if(!(await entregarArchivo(new Blob([XLSX.write(wb,{bookType:'xlsx',type:'array'})],{type:XLSX_MIME}),exportName('xlsx'),XLSX_MIME)))toast(rows.length+' solicitudes exportadas a Excel')}
   catch(e){toast(errMsg(e),4000)}finally{btn.disabled=false;btn.textContent=txt}}
 async function exportListPDF(btn){
   btn.disabled=true;const txt=btn.textContent;btn.innerHTML='<span class="spin"></span> Preparando…';
@@ -341,7 +361,7 @@ async function exportListPDF(btn){
       didDrawPage:d=>{doc.setFontSize(8);doc.setTextColor(110);doc.text('Página '+doc.internal.getNumberOfPages(),W-36,doc.internal.pageSize.getHeight()-18,{align:'right'})}});
     const ap=rows.filter(s=>s.estado==='Aprobada');doc.setFontSize(9.5);doc.setTextColor(30);
     doc.text(`Total: ${rows.length} · Aprobadas: ${ap.length} · Ahorro inicial de aprobadas: ${L(ap.reduce((a,s)=>a+Number(s.ahorro_inicial),0))}`,36,doc.lastAutoTable.finalY+20);
-    doc.save(exportName('pdf'));toast('Reporte PDF descargado')}
+    if(!(await entregarArchivo(doc.output('blob'),exportName('pdf'),'application/pdf')))toast('Reporte PDF descargado')}
   catch(e){toast(errMsg(e),4000)}finally{btn.disabled=false;btn.textContent=txt}}
 async function fichaPDF(btn){
   btn.disabled=true;const txt=btn.textContent;btn.innerHTML='<span class="spin"></span> Generando…';
@@ -359,7 +379,7 @@ async function fichaPDF(btn){
       while(y<canvas.height-4){let end=y+ph2;if(end<canvas.height){const c=cuts.filter(v=>v>y+ph2*0.5&&v<=end).pop();if(c)end=c}end=Math.min(end,canvas.height);
         const h=end-y,c=document.createElement('canvas');c.width=canvas.width;c.height=h;c.getContext('2d').drawImage(canvas,0,y,canvas.width,h,0,0,canvas.width,h);
         if(n)doc.addPage();doc.addImage(c.toDataURL('image/jpeg',.92),'JPEG',x0,m,w,h*w/canvas.width);doc.setFontSize(8);doc.setTextColor(120);doc.text('Página '+(n+1),pw-m,ph-10,{align:'right'});y=end;n++}}
-    const s=S.detail.s;doc.save(`Ficha_${s.codigo_socio||s.folio}_${(s.apellidos+'_'+s.nombres).replace(/\s+/g,'_')}.pdf`);area.innerHTML='';toast('Ficha descargada en PDF')}
+    const s=S.detail.s;area.innerHTML='';if(!(await entregarArchivo(doc.output('blob'),`Ficha_${s.codigo_socio||s.folio}_${(s.apellidos+'_'+s.nombres).replace(/\s+/g,'_')}.pdf`,'application/pdf')))toast('Ficha descargada en PDF')}
   catch(e){toast(errMsg(e),4000)}finally{btn.disabled=false;btn.textContent=txt}}
 
 /* ================= Avisos (notificaciones push) ================= */
@@ -475,7 +495,7 @@ function vBandeja(){
   if(S.open)return vDetalle();
   return `${vBandejaTipo()}<h1>Solicitudes recibidas</h1><p class="lead">Revise cada ficha, imprímala para firma y apruébela con el número de acta.</p>
   <div class="filters">${['Pendiente','Aprobada','Rechazada','Todas'].map(f=>`<button data-f="${f}" class="${S.filter===f?'on':''}">${f==='Todas'?'Todas':f+'s'}</button>`).join('')}</div>
-  <div class="toolbar"><span class="hint">${S.bandeja.length} ${S.bandeja.length===1?'solicitud':'solicitudes'} en esta vista</span>${puedeExportar()?`<div class="grp"><button class="btn-sm" id="xlsBtn">Exportar Excel</button><button class="btn-sm" id="pdfListBtn">Exportar PDF</button></div>`:'<span class="hint">Exportar listados: solo el administrador</span>'}</div>
+  <div class="toolbar"><span class="hint">${S.bandeja.length} ${S.bandeja.length===1?'solicitud':'solicitudes'} en esta vista</span>${puedeExportar()?`<div class="grp"><button class="btn-sm" id="xlsBtn">Exportar Excel</button><button class="btn-sm" id="pdfListBtn">Exportar PDF</button><button class="btn-sm btn-wa" id="waListXls">Excel por WhatsApp</button><button class="btn-sm btn-wa" id="waListPdf">PDF por WhatsApp</button></div>`:'<span class="hint">Exportar listados: solo el administrador</span>'}</div>
   <form id="searchF" style="display:flex;gap:8px;margin-bottom:12px"><label for="qBox" class="t" hidden>Buscar</label><input id="qBox" placeholder="Buscar por nombre, DNI o código" value="${esc(S.q)}"><button type="submit">Buscar</button></form>
   <div class="list">${S.bandeja.length?S.bandeja.map(s=>`<button class="item" data-open="${s.id}"><b>${esc(s.nombres+' '+s.apellidos)}${s.tipo_solicitud==='Actualización'?' <span class="pill p-q">Actualización</span>':''}${s.tipo_cuenta==='Ahorro con propósito'?' <span class="pill p-q">Ahorro con propósito</span>':''}</b>${pill(s.estado)}<span class="meta"><span class="mono">${esc(s.codigo_socio||s.folio)}</span> · DNI ${esc(fmtDni(s.dni))} · ${esc(s.aldea)}, ${esc(s.municipio)} · ${esc(s.promotor_nombre)} · ${fecha(s.creado_en)}</span><span class="meta num">${L(s.ahorro_inicial)}</span></button>`).join(''):`<div class="card empty">No hay solicitudes ${S.filter==='Todas'?'':S.filter.toLowerCase()+'s'} ${S.q?'que coincidan con la búsqueda':''}.</div>`}</div>`;
 }
@@ -535,7 +555,7 @@ function vDetalle(){
   return `<button id="back" class="btn-sm">← Volver a la bandeja</button>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px"><h1>${esc(s.nombres+' '+s.apellidos)}</h1>${pill(s.estado)}</div>
   ${s.estado==='Pendiente'?`<div class="card" style="margin-top:14px"><h3>${s.tipo_solicitud==='Actualización'?'Aprobar actualización de datos':'Autorizar como socio/a ahorrante'}</h3><p class="hint" style="margin:4px 0 0">Verifique que la foto del DNI coincide con los datos antes de aprobar.</p><div class="actions"><div class="f" style="width:150px"><label class="t" for="acta">No. de acta</label><input id="acta" class="mono" placeholder="Ej. 15"></div><button class="btn-primary" id="approve">Aprobar y generar código</button></div><div class="actions"><div class="f" style="flex:1;min-width:200px"><label class="t" for="motivo">Motivo de rechazo</label><input id="motivo" placeholder="Ej. DNI ilegible, volver a visitar"></div><button class="btn-bad" id="reject">Rechazar</button></div><p class="err" id="apErr"></p></div>`:''}
-  <div class="card" style="margin-top:14px"><div class="rowbtns" style="margin-top:0"><h3>Documentos</h3><div class="grp" style="display:flex;gap:8px;flex-wrap:wrap"><button id="pdfFichaBtn">Descargar PDF</button><button class="btn-primary" id="printBtn">Imprimir ficha</button></div></div>
+  <div class="card" style="margin-top:14px"><div class="rowbtns" style="margin-top:0"><h3>Documentos</h3><div class="grp" style="display:flex;gap:8px;flex-wrap:wrap"><button id="pdfFichaBtn">Descargar PDF</button><button class="btn-wa" id="waFichaBtn" title="WhatsApp o WhatsApp Business">Compartir por WhatsApp</button>${s.estado!=='Pendiente'&&s.celular?`<button class="btn-wa" id="waAvisoSocio">Avisar al ${s.tipo_cuenta==='Socio'?'socio/a':'cliente'}</button>`:''}<button class="btn-primary" id="printBtn">Imprimir ficha</button></div></div>
   <div class="docs">${[['foto_solicitante','Rostro del solicitante'],['foto_dni_frente','Documento · frente'],['foto_dni_reverso','Documento · reverso'],['firma',s.firma_a_ruego?'Huella':'Firma'],['firma_testigo','Firma del testigo']].map(([k,t])=>s[k]&&urls[s[k]]?`<figure><a href="${urls[s[k]]}" target="_blank" rel="noopener"><img src="${urls[s[k]]}" crossorigin="anonymous" alt="${t}"></a><figcaption>${t}</figcaption></figure>`:'').join('')||'<span class="hint">Sin documentos adjuntos.</span>'}</div>
   ${s.latitud!=null?`<p style="margin:12px 0 0"><a href="https://www.google.com/maps?q=${Number(s.latitud)},${Number(s.longitud)}" target="_blank" rel="noopener noreferrer">Ver la vivienda en el mapa</a> <span class="hint">· precisión ${Math.round(s.gps_precision_m||0)} m</span></p>`:''}<h3 style="margin-top:16px">Historial</h3><ul class="log">${log.map(l=>`<li>${fechaHora(l.creado_en)} · ${esc(l.accion)}${l.detalle?' · '+esc(l.detalle):''}</li>`).join('')}</ul></div>
   <div class="sheet-wrap">${fichaHTML(s,urls)}</div>`;

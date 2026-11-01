@@ -257,7 +257,7 @@ function vBandejaCreditos(){
   if(S.copen)return vCredDetalle();
   return `${vBandejaTipo()}<h1>Solicitudes de crédito</h1><p class="lead">Revise cada solicitud, imprímala con la hoja del fiador y registre la resolución del comité.</p>
   <div class="filters">${['Pendiente','Aprobado','Denegado','Todas'].map(f=>`<button data-cf="${f}" class="${S.cfilter===f?'on':''}">${f==='Todas'?'Todas':f+'s'}</button>`).join('')}</div>
-  <div class="toolbar"><span class="hint">${S.creditos.length} ${S.creditos.length===1?'solicitud':'solicitudes'} en esta vista</span>${puedeExportar()?`<div class="grp"><button class="btn-sm" id="crXls">Exportar Excel</button></div>`:''}</div>
+  <div class="toolbar"><span class="hint">${S.creditos.length} ${S.creditos.length===1?'solicitud':'solicitudes'} en esta vista</span>${puedeExportar()?`<div class="grp"><button class="btn-sm" id="crXls">Exportar Excel</button><button class="btn-sm btn-wa" id="crWaXls">Excel por WhatsApp</button></div>`:''}</div>
   <form id="cSearchF" style="display:flex;gap:8px;margin-bottom:12px"><label for="cqBox" class="t" hidden>Buscar</label><input id="cqBox" placeholder="Buscar por nombre, identidad o folio" value="${esc(S.q)}"><button type="submit">Buscar</button></form>
   <div class="list">${S.creditos.length?S.creditos.map(s=>`<button class="item" data-copen="${s.id}"><b>${esc(s.nombres+' '+s.apellidos)}</b>${pillC(s.estado,s.analizado_en)}<span class="meta"><span class="mono">${esc(s.folio)}</span> · ${esc(fmtDni(s.dni))} · ${esc(s.garantia||'')} · ${esc(s.promotor_nombre)} · ${fecha(s.creado_en)}</span><span class="meta num">${L(s.monto_solicitado)} · ${s.plazo_meses} m</span></button>`).join(''):`<div class="card empty">No hay solicitudes de crédito ${S.cfilter==='Todas'?'':S.cfilter.toLowerCase()+'s'}.</div>`}</div>`}
 function vCredDetalle(){
@@ -275,7 +275,7 @@ function vCredDetalle(){
     <div class="f"><label class="t" for="crActa">N° de acta del comité <i>*</i></label><input id="crActa" data-cres="acta" value="${esc(r.acta||'')}"></div><div class="f"><label class="t" for="crPres">Miembros presentes</label><input id="crPres" data-cres="presentes" value="${esc(r.presentes||'')}" placeholder="Nombres de quienes firman"></div>
     <div class="f full"><label class="t" for="crObs">Observaciones${r.decision==='Denegado'?' <i>*</i>':''}</label><textarea id="crObs" rows="2" data-cres="observaciones">${esc(r.observaciones)}</textarea></div></div>
     <div class="rowbtns"><span class="err" id="crErr"></span><button class="btn-primary" id="crResolver" ${r.decision?'':'disabled'}>Registrar resolución</button></div></div>`:''}
-  <div class="card" style="margin-top:14px"><div class="rowbtns" style="margin-top:0"><h3>Documentos</h3><div class="grp" style="display:flex;gap:8px;flex-wrap:wrap"><button id="crPlan">Plan de pagos</button><button id="crPdf">Descargar PDF</button><button class="btn-primary" id="crPrint">Imprimir</button></div></div>
+  <div class="card" style="margin-top:14px"><div class="rowbtns" style="margin-top:0"><h3>Documentos</h3><div class="grp" style="display:flex;gap:8px;flex-wrap:wrap"><button id="crPlan">Plan de pagos</button><button id="crPdf">Descargar PDF</button><button class="btn-wa" id="crWaPdf" title="WhatsApp o WhatsApp Business">Compartir por WhatsApp</button>${s.estado!=='Pendiente'&&s.datos?.cli?.cel1?`<button class="btn-wa" id="crAviso">Avisar al cliente</button>`:''}<button class="btn-primary" id="crPrint">Imprimir</button></div></div>
   <div class="docs">${docs.map(([k,t])=>fig(s.documentos?.[k],t)).join('')}${(s.fiadores||[]).map((f,i)=>docs.map(([k,t])=>fig(f.docs?.[k],`Fiador ${i+1} · ${t}`)).join('')).join('')}</div>
   ${s.datos?.cli?.lat!=null?`<p style="margin:12px 0 0"><a href="https://www.google.com/maps?q=${Number(s.datos.cli.lat)},${Number(s.datos.cli.lng)}" target="_blank" rel="noopener noreferrer">Ver la vivienda en el mapa</a></p>`:''}
   <h3 style="margin-top:16px">Historial</h3><ul class="log">${log.map(l=>`<li>${fechaHora(l.creado_en)} · ${esc(l.accion)}${l.detalle?' · '+esc(l.detalle):''}</li>`).join('')}</ul></div>
@@ -348,7 +348,7 @@ async function cPdf(btn){
       while(y<cv.height-4){let end=y+ph2;if(end<cv.height){const c=cuts.filter(v=>v>y+ph2*0.5&&v<=end).pop();if(c)end=c}end=Math.min(end,cv.height);
         const h=end-y,c=document.createElement('canvas');c.width=cv.width;c.height=h;c.getContext('2d').drawImage(cv,0,y,cv.width,h,0,0,cv.width,h);
         if(pag)doc.addPage();doc.addImage(c.toDataURL('image/jpeg',.92),'JPEG',x0,m,w,h*w/cv.width);pag++;doc.setFontSize(8);doc.setTextColor(120);doc.text('Página '+pag,pw-m,ph-10,{align:'right'});y=end}}
-    area.innerHTML='';doc.save(`Credito_${s.folio}_${(s.apellidos+'_'+s.nombres).replace(/\s+/g,'_')}.pdf`);toast('Solicitud descargada en PDF')}
+    area.innerHTML='';if(!(await entregarArchivo(doc.output('blob'),`Credito_${s.folio}_${(s.apellidos+'_'+s.nombres).replace(/\s+/g,'_')}.pdf`,'application/pdf')))toast('Solicitud descargada en PDF')}
   catch(e){toast(errMsg(e),4000)}finally{btn.disabled=false;btn.textContent=txt}}
 async function cExcel(btn){
   btn.disabled=true;const txt=btn.textContent;btn.innerHTML='<span class="spin"></span> Preparando…';
@@ -364,7 +364,7 @@ async function cExcel(btn){
     const ws=XLSX.utils.json_to_sheet(data,{cellDates:true,dateNF:'dd/mm/yyyy'}),keys=Object.keys(data[0]);
     ws['!cols']=keys.map(k=>({wch:Math.min(40,Math.max(k.length+2,...data.slice(0,200).map(r=>String(r[k]??'').length+1)))}));
     ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:data.length,c:keys.length-1}})};
-    const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Créditos');XLSX.writeFile(wb,`CACIH_creditos_${S.cfilter.toLowerCase()}_${new Date().toISOString().slice(0,10)}.xlsx`);toast(rows.length+' solicitudes de crédito exportadas')}
+    const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Créditos');if(!(await entregarArchivo(new Blob([XLSX.write(wb,{bookType:'xlsx',type:'array'})],{type:XLSX_MIME}),`CACIH_creditos_${S.cfilter.toLowerCase()}_${new Date().toISOString().slice(0,10)}.xlsx`,XLSX_MIME)))toast(rows.length+' solicitudes de crédito exportadas')}
   catch(e){toast(errMsg(e),4000)}finally{btn.disabled=false;btn.textContent=txt}}
 
 /* ---------- firmas ---------- */
@@ -576,10 +576,8 @@ function ejemploCredito(){const c=cBlank(),x=c.cli;Object.assign(c.cond,{monto:'
   x.patronos[0]={nombre:'Parcela propia',tel:'',dir:'Aldea El Rosario',cargo:'Productora',ant:'60'};x.refs=[{n:'Rosa Díaz',p:'Vecina',tel:'3344-5566'},{n:'Luis Ejemplo',p:'Hermano',tel:'9911-0000'}];x.emergencia={n:'Luis Ejemplo',donde:'Catacamas',tel:'9911-0000'};
   c.garantiaDesc='Fiador solidario con empleo fijo';const f=c.fiadores[0];Object.assign(f,{n1:'Pedro',a1:'Fiador',lugarNac:'Catacamas',nac:'1975-02-01',dni:'1503197500456',civil:'Soltero/a',direccion:'Barrio Abajo',municipio:'Catacamas',cel1:'9888-1111',vivienda:'Casa propia',remesas:'No',cuentas:'No',terrenos:'No',vehiculo:'No'});f.patronos[0].nombre='Taller Fiador';return c}
 async function compartirPlan(doc,nom,p,m){
-  const per=p.quin?'quincenal':'mensual',txt=`CACIH · Plan de pagos estimado${m.nombre?' para '+m.nombre:''}: ${L(p.P)} a ${p.n0} meses, cuota ${per} ${L(p.c1)}, total a pagar ${L(p.total)}. Cálculo informativo; la cuota definitiva la fija el comité de crédito.`;
-  const blob=doc.output('blob'),file=new File([blob],nom,{type:'application/pdf'});
-  if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:'Plan de pagos CACIH',text:txt});return}catch(e){if(e.name==='AbortError')return}}
-  doc.save(nom);const cel=String(m.celular||'').replace(/\D/g,'');window.open(`https://wa.me/${cel.length===8?'504'+cel:cel}?text=${encodeURIComponent(txt+' (Le envío el PDF a continuación.)')}`,'_blank','noopener');toast('PDF descargado: adjúntelo en el chat de WhatsApp',6000)}
+  const per=p.quin?'quincenal':'mensual',txt0=`CACIH · Plan de pagos estimado${m.nombre?' para '+m.nombre:''}: ${L(p.P)} a ${p.n0} meses, cuota ${per} ${L(p.c1)}, total a pagar ${L(p.total)}. Cálculo informativo; la cuota definitiva la fija el comité de crédito.`;
+  S.compartir={titulo:'Plan de pagos CACIH',texto:txt0,cel:m.celular,ref:'Plan de pagos '+(m.nombre||'')};await entregarArchivo(doc.output('blob'),nom,'application/pdf')}
 document.addEventListener('change',e=>{const el=e.target;
   if(el.dataset.cprod&&S.cdraft){const k=S.cdraft.cond;k.producto=el.value;aplicarTarifa(k);cSave();render()}
   if(el.dataset.smprod&&S.sim){S.sim.producto=el.value;simTarifa();render()}
@@ -591,3 +589,23 @@ document.addEventListener('input',e=>{const el=e.target;
 document.addEventListener('click',async e=>{const t=e.target.closest('button');if(!t||!S.session)return;
   if(t.id==='crEjemplo'){S.cdraft=ejemploCredito();cSave();S.cstep=0;S.cerrors={};render();toast('Ejemplo cargado: recorra los pasos')}
   if(t.id==='crAnaGuardar'){t.disabled=true;const{error}=await sb.rpc('guardar_analisis',{p_id:S.copen,p_analisis:S.cana});if(error){toast(errMsg(error),5000);t.disabled=false;return}toast('Análisis guardado');loadCredDetail(S.copen)}});
+
+
+/* =====================================================================
+   v1.9 · Compartir por WhatsApp (oficina)
+   ===================================================================== */
+const nombreCaja=()=>S.params.nombre||'CACIH';
+function textoAvisoCredito(s){const r=s.resolucion||{},n=s.nombres.split(' ')[0];
+  if(s.estado==='Aprobado')return `Hola ${n}, le saluda ${nombreCaja()}. Su solicitud de crédito ${s.folio} fue APROBADA:\n• Monto: ${L(r.monto)}\n• Plazo: ${r.plazo} meses\n• Tasa: ${r.tasa} % ${String(r.tasaTipo||'').toLowerCase()}\n• Cuota ${r.forma==='Quincenal'?'quincenal':'mensual'}: ${r.cuota?L(r.cuota):'por confirmar'}\nPor favor acérquese a la oficina con su identidad${s.fiadores?.length?' y su fiador':''} para firmar y recibir el desembolso.\n${S.params.direccion||''} · Tel. ${S.params.telefonos||''}`;
+  return `Hola ${n}, le saluda ${nombreCaja()}. Su solicitud de crédito ${s.folio} no fue aprobada en esta ocasión. Con gusto le explicamos el motivo y las alternativas en la oficina.\n${S.params.direccion||''} · Tel. ${S.params.telefonos||''}`}
+function textoAvisoSocio(s){const n=s.nombres.split(' ')[0];
+  if(s.estado==='Aprobada')return `Hola ${n}, le saluda ${nombreCaja()}. ¡Bienvenido/a! Su ${s.tipo_solicitud==='Actualización'?'actualización de datos fue aprobada':'afiliación fue APROBADA'}.${s.codigo_socio?`\nSu código de ${s.tipo_cuenta==='Socio'?'socio':'cliente'} es: ${s.codigo_socio}`:''}\n${S.params.direccion||''} · Tel. ${S.params.telefonos||''}`;
+  return `Hola ${n}, le saluda ${nombreCaja()}. Su solicitud ${s.folio} necesita completarse antes de aprobarse. Por favor comuníquese con la oficina.\n${S.params.direccion||''} · Tel. ${S.params.telefonos||''}`}
+document.addEventListener('click',async e=>{const t=e.target.closest('button');if(!t||!S.session)return;
+  if(t.id==='waListXls'||t.id==='waListPdf'){S.compartir={titulo:'CACIH · solicitudes',texto:`${nombreCaja()} · listado de solicitudes (${S.filter}${S.q?' · '+S.q:''}).`,ref:'Listado '+S.filter};if(t.id==='waListXls')exportExcel(t);else exportListPDF(t)}
+  if(t.id==='waFichaBtn'&&S.detail){const s=S.detail.s;S.compartir={titulo:'Ficha '+(s.codigo_socio||s.folio),texto:`${nombreCaja()} · ficha de ${s.nombres} ${s.apellidos} (${s.codigo_socio||s.folio}). Documento confidencial.`,ref:'Ficha '+(s.codigo_socio||s.folio)};fichaPDF(t)}
+  if(t.id==='waAvisoSocio'&&S.detail){const s=S.detail.s;try{await registrarExport('WhatsApp','Aviso '+(s.codigo_socio||s.folio),1)}catch(x){}compartirTexto(s.celular,textoAvisoSocio(s))}
+  if(t.id==='crWaXls'){S.compartir={titulo:'CACIH · créditos',texto:`${nombreCaja()} · solicitudes de crédito (${S.cfilter}).`,ref:'Créditos '+S.cfilter};cExcel(t)}
+  if(t.id==='crWaPdf'&&S.cdetail){const s=S.cdetail.s;S.compartir={titulo:'Crédito '+s.folio,texto:`${nombreCaja()} · solicitud de crédito ${s.folio} de ${s.nombres} ${s.apellidos} · ${s.estado}. Documento confidencial.`,ref:'Crédito '+s.folio};cPdf(t)}
+  if(t.id==='crAviso'&&S.cdetail){const s=S.cdetail.s;try{await registrarExport('WhatsApp','Aviso '+s.folio,1)}catch(x){}compartirTexto(s.datos.cli.cel1,textoAvisoCredito(s))}
+});

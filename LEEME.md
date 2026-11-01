@@ -92,6 +92,17 @@ Llega primero un aviso de prueba.
 - Si el navegador bloqueó los avisos, se permiten desde el candado junto a la dirección.
 - Al tocar **Salir**, ese dispositivo deja de recibir avisos.
 
+## Versión 1.9 · Compartir por WhatsApp
+
+Suba a GitHub `app.js`, `credito.js` y `sw.js`. En *Parámetros* debe decir **1.9.0**.
+
+- **Bandeja (listados):** *Excel por WhatsApp* y *PDF por WhatsApp* (afiliaciones) y *Excel por WhatsApp* (créditos). Siguen la regla de *Quién puede exportar listados*.
+- **Cada solicitud:** *Compartir por WhatsApp* envía la ficha o la solicitud de crédito en PDF.
+- **Avisar al socio / Avisar al cliente** (solicitudes ya resueltas): abre el chat con el celular del cliente y un mensaje listo (aprobado con código de socio, o crédito aprobado con monto, plazo, tasa y cuota; o no aprobado, sin dar el motivo por escrito).
+- **WhatsApp o WhatsApp Business:** en el celular y en Windows/Mac con Chrome o Edge aparece la ventana de compartir y usted elige cuál. Si el navegador no la tiene, el archivo se descarga y se abre WhatsApp: toque el clip 📎 y adjúntelo desde Descargas.
+- Si el PDF tarda en generarse, aparece abajo **Enviar por WhatsApp**: tóquelo para terminar (el navegador exige un toque reciente).
+- Cada envío queda en la bitácora de exportaciones como *WhatsApp*.
+
 ## Versión 1.8 · Tarifario de tasas y controles
 
 ### Instalar la 1.8
